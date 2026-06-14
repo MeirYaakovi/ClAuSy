@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pycache
+venv/
+.venv/
+*.egg-info/
+dist/
+build/
+
+# Config / secrets — user supplies paths at runtime; never commit these
+.env
+config.json
+*.local.json
+secrets/
+secrets.json
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
