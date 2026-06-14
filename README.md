@@ -1,5 +1,10 @@
 # ClAuSy — Claude Paths Manager
 
+![Python](https://img.shields.io/badge/Python-3.9+-blue?logo=python&logoColor=white)
+![License](https://img.shields.io/badge/License-MIT-green)
+![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS-lightgrey)
+![Dependencies](https://img.shields.io/badge/Dependencies-none-brightgreen)
+
 A dark-themed desktop app that manages which directories **Claude Code** and **Claude Desktop** are authorized to access — all from a single UI, without manually editing JSON files.
 
 ---
