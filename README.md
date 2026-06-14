@@ -15,6 +15,8 @@
 
 A dark-themed desktop app that manages which directories **Claude Code** and **Claude Desktop** are authorized to access — all from a single UI, without manually editing JSON files.
 
+> Most Claude permission tools are CLI-based or run in a browser. ClAuSy is a native desktop app — open it, toggle, done. No browser, no CLI, no dependencies.
+
 ---
 
 ## Features
