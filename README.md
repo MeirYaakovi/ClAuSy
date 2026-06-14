@@ -14,7 +14,7 @@ A dark-themed desktop app that manages which directories **Claude Code** and **C
 - **List & Thumbnail views** — choose your preferred layout
 - **Sort** — by label name (A→Z / Z→A) or directory creation date
 - **Multi-select + column-header toggle** — check rows, then click a column header circle to set all at once
-- **Undo** — step back through toggle changes before committing
+- **Undo** — 30-level undo stack for toggle changes before committing
 - **Safe JSON patching** — only touches the relevant key in each config file; never breaks surrounding content
 - **Auto-detect** — finds your Claude config files automatically on first launch
 - **No hardcoded paths or secrets** — all config locations are entered by you at runtime
@@ -59,6 +59,18 @@ python main.py
 
 ---
 
+## App settings
+
+ClAuSy saves its own UI preferences (config file paths, directory labels, view/sort mode) to:
+
+```
+~/.clauSy/settings.json
+```
+
+This file lives outside the repository and is never committed. It contains no secrets — only file paths and UI preferences.
+
+---
+
 ## Privacy
 
-ClAuSy stores only its own UI settings (config file paths and directory labels) in `~/.clauSy/settings.json` — outside this repository. No personal paths or secrets are ever committed.
+No personal paths, tokens, or secrets are ever committed to this repository. All config file locations are entered by the user at runtime.
