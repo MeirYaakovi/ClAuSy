@@ -72,13 +72,13 @@ class ToggleCircle(tk.Canvas):
 
     def _draw(self):
         self.delete("all")
-        fill    = self.on_color if self._state else SURF
-        outline = self.on_color if self._state else OFF
+        fill    = self.on_color if self._state else ""
+        outline = self.on_color if self._state else "#5858a8"
         self.create_oval(2, 2, ICON_S - 2, ICON_S - 2,
                          fill=fill, outline=outline, width=2)
         self.create_text(ICON_S // 2, ICON_S // 2 + 1,
                          text=self.letter,
-                         fill="white" if self._state else OFF_TXT,
+                         fill="white" if self._state else "#6868b8",
                          font=("Segoe UI", 8, "bold"))
 
     def _click(self, _=None):
@@ -415,7 +415,10 @@ class ClausyApp:
 
         self._sf = ScrollableFrame(self._content, bg=SURF)
         self._sf.pack(fill="both", expand=True)
-        self._sf.inner.columnconfigure(2, weight=1)
+        self._sf.inner.columnconfigure(2, weight=1, minsize=200)
+        self._sf.inner.columnconfigure(3, minsize=44)
+        self._sf.inner.columnconfigure(4, minsize=44)
+        self._sf.inner.columnconfigure(5, minsize=44)
 
         # thumbnail canvas
         self._thumb_outer = tk.Frame(self._content, bg=BG)
@@ -545,7 +548,10 @@ class ClausyApp:
                              on_pre_change=self._push_undo)
             r.place(i)
             self._rows.append(r)
-        self._sf.inner.columnconfigure(2, weight=1)
+        self._sf.inner.columnconfigure(2, weight=1, minsize=200)
+        self._sf.inner.columnconfigure(3, minsize=44)
+        self._sf.inner.columnconfigure(4, minsize=44)
+        self._sf.inner.columnconfigure(5, minsize=44)
 
     def _switch_view(self):
         if self._view_var.get() == "list":
@@ -680,12 +686,12 @@ class ClausyApp:
             badge_centers: dict = {}
             for letter, color, state, bx, bkey in badge_defs:
                 by      = y0 + 16
-                fill    = color if state else SURF
-                outline = color if state else OFF
+                fill    = color if state else ""
+                outline = color if state else "#5858a8"
                 cv.create_oval(bx - 10, by - 10, bx + 10, by + 10,
                                fill=fill, outline=outline, width=2)
                 cv.create_text(bx, by + 1, text=letter,
-                               fill="white" if state else OFF_TXT,
+                               fill="white" if state else "#6868b8",
                                font=("Segoe UI", 8, "bold"))
                 badge_centers[bkey] = (bx, by)
 
