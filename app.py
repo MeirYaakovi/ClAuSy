@@ -276,7 +276,9 @@ class ClausyApp:
         wrap.pack(fill="both", expand=True, padx=40, pady=30)
         wrap.columnconfigure(0, weight=1)
 
-        def row(label, var, r):
+        self._val_labels: dict = {}
+
+        def row(label, var, r, cfg_type):
             tk.Label(wrap, text=label, bg=BG, fg=TEXT,
                      font=("Segoe UI", 10, "bold")).grid(
                          row=r, column=0, sticky="w", pady=(18, 3))
@@ -294,9 +296,13 @@ class ClausyApp:
                       relief="flat", cursor="hand2", padx=12,
                       command=lambda v=var: self._browse_file(v)
                       ).grid(row=0, column=1)
+            lbl = tk.Label(f, text="—", bg=BG, fg=DIM,
+                           font=("Segoe UI", 13), width=2, anchor="w")
+            lbl.grid(row=0, column=2, padx=(10, 0))
+            self._val_labels[cfg_type] = lbl
 
-        row("Claude Code settings file  ( ~/.claude/settings.json )",  self._cc_var, 0)
-        row("Claude Desktop config  ( claude_desktop_config.json )",   self._cd_var, 2)
+        row("Claude Code settings file  ( ~/.claude/settings.json )",  self._cc_var, 0, "cc")
+        row("Claude Desktop config  ( claude_desktop_config.json )",   self._cd_var, 2, "cd")
 
         btn_f = tk.Frame(wrap, bg=BG)
         btn_f.grid(row=4, column=0, sticky="w", pady=28)
@@ -310,7 +316,8 @@ class ClausyApp:
 
         btn(btn_f, "Auto-Detect",   self._auto_detect        ).pack(side="left", padx=(0, 10))
         btn(btn_f, "Save & Reload", self._save_and_reload,
-            accent=True                                       ).pack(side="left")
+            accent=True                                       ).pack(side="left", padx=(0, 10))
+        btn(btn_f, "✔ Check",       self._validate_paths      ).pack(side="left")
 
         self._status_lbl = tk.Label(wrap, text="", bg=BG, fg=DIM,
                                     font=("Segoe UI", 9))
@@ -466,6 +473,7 @@ class ClausyApp:
         self._labels: dict = data.get("labels", {})
         self._reload_entries()
         self._switch_view()
+        self._validate_paths(silent=True)
 
     def _save_settings_data(self):
         for r in self._rows:
@@ -495,18 +503,49 @@ class ClausyApp:
 
     def _save_and_reload(self):
         self._save_settings_data()
+        self._validate_paths(silent=True)
         self._reload_entries()
         self._set_status("Saved. Config files reloaded.")
 
     def _set_status(self, msg: str, color: str = DIM):
         self._status_lbl.config(text=msg, fg=color)
 
+    def _validate_paths(self, silent: bool = False):
+        """Update ✔/✗ indicators next to each path field.
+        silent=True suppresses the status-bar message (used on load/reload)."""
+        errors = []
+        for cfg_type, var in [("cc", self._cc_var), ("cd", self._cd_var)]:
+            lbl = self._val_labels.get(cfg_type)
+            if lbl is None:
+                continue
+            path = var.get().strip()
+            if not path:
+                lbl.config(text="—", fg=DIM)
+                continue
+            ok, msg = config_manager.validate_path(path, cfg_type)
+            if ok:
+                lbl.config(text="✔", fg=CC_G)
+            else:
+                lbl.config(text="✗", fg=CC_R)
+                errors.append(msg)
+        if not silent:
+            if errors:
+                self._set_status("  ·  ".join(errors), CC_R)
+            else:
+                self._set_status("Config files look good ✔", CC_G)
+
     # ── entry management ─────────────────────────────────────────────────────
 
     def _reload_entries(self):
         cc = self._cc_var.get()
         cd = self._cd_var.get()
-        path_states = config_manager.read_all_dirs(cc, cd)
+        try:
+            path_states = config_manager.read_all_dirs(cc, cd)
+        except config_manager.ConfigError as e:
+            messagebox.showerror("ClAuSy — Config Error",
+                                 f"Could not read config file:\n\n{e}\n\n"
+                                 "Fix the file or select a different path in Settings.")
+            return
 
         new_entries = []
         for path, flags in path_states.items():

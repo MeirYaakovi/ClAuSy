@@ -4,6 +4,10 @@ import os
 from pathlib import Path
 
 
+class ConfigError(Exception):
+    """Raised when a config file exists but cannot be parsed."""
+
+
 def auto_detect() -> dict:
     cc = Path.home() / ".claude" / "settings.json"
     appdata = os.environ.get("APPDATA", "")
@@ -22,8 +26,29 @@ def _load(path: str) -> dict:
     p = Path(path)
     if not p.exists():
         return {}
-    with open(p, "r", encoding="utf-8") as f:
-        return json.load(f)
+    try:
+        with open(p, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except json.JSONDecodeError as e:
+        raise ConfigError(
+            f"Invalid JSON in {p.name}: {e.msg} (line {e.lineno})"
+        ) from e
+
+
+def validate_path(path: str, cfg_type: str) -> tuple:
+    """Returns (ok: bool, error_msg: str). cfg_type is 'cc' or 'cd'."""
+    if not path:
+        return False, "No path specified"
+    p = Path(path)
+    if not p.exists():
+        return False, "File not found"
+    try:
+        data = _load(path)
+    except ConfigError as e:
+        return False, str(e)
+    if not isinstance(data, dict):
+        return False, "Expected a JSON object at root level"
+    return True, ""
 
 
 def _save(path: str, data: dict):
