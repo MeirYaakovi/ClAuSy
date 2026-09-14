@@ -185,10 +185,12 @@ class DirectoryRow:
     """One row in the list view — placed directly on a CTkScrollableFrame's grid."""
 
     def __init__(self, parent, entry: dict, idx: int,
-                 on_change=None, on_pre_change=None, is_overlap: bool = False):
+                 on_change=None, on_pre_change=None, is_overlap: bool = False,
+                 on_remove=None):
         self.entry         = entry
         self.on_change     = on_change
         self.on_pre_change = on_pre_change
+        self.on_remove     = on_remove
         self._sel          = tk.BooleanVar(value=False)
 
         self.cb = ctk.CTkCheckBox(parent, text="", variable=self._sel,
@@ -220,6 +222,7 @@ class DirectoryRow:
                                fg_color="transparent", text_color=(WARN if warnings else DIM),
                                font=("Consolas", 10), anchor="w", cursor="hand2")
         self.pl.bind("<Double-Button-1>", self._open_dir)
+        self.pl.bind("<Button-3>", self._show_context_menu)
         if warnings:
             Tooltip(self.pl, "\n\n".join(warnings))
 
@@ -251,6 +254,24 @@ class DirectoryRow:
         p = self.entry.get("path", "")
         if os.path.isdir(p):
             os.startfile(p)
+
+    def _copy_path(self):
+        self.pl.clipboard_clear()
+        self.pl.clipboard_append(self.entry.get("path", ""))
+
+    def _show_context_menu(self, event):
+        menu = tk.Menu(self.pl, tearoff=0, bg=SURF2, fg=TEXT,
+                       activebackground=ACCENT, activeforeground="white",
+                       bd=0)
+        menu.add_command(label="Open", command=self._open_dir)
+        menu.add_command(label="Copy path", command=self._copy_path)
+        menu.add_separator()
+        menu.add_command(label="Remove", command=self._remove)
+        menu.tk_popup(event.x_root, event.y_root)
+
+    def _remove(self):
+        if self.on_remove:
+            self.on_remove(self.entry.get("path", ""))
 
     def _sync_label(self):
         self.entry["label"] = self._lv.get()
@@ -743,7 +764,8 @@ class ClausyApp:
             r = DirectoryRow(self._sf, entry, i,
                              on_change=lambda: setattr(self, "_pending", True),
                              on_pre_change=self._push_undo,
-                             is_overlap=_norm(entry.get("path", "")) in overlaps)
+                             is_overlap=_norm(entry.get("path", "")) in overlaps,
+                             on_remove=self._remove_single_path)
             r.place(i)
             self._rows.append(r)
         self._configure_row_grid(self._sf)
@@ -822,6 +844,22 @@ class ClausyApp:
         self._pending = True
 
     # ── header column toggle ─────────────────────────────────────────────────
+
+    def _remove_single_path(self, path: str):
+        entry = next((e for e in self._entries if e["path"] == path), None)
+        if entry is None:
+            return
+        label = entry.get("label") or path
+        if not messagebox.askyesno(
+                "ClAuSy", f"Remove '{label}' from the list?\n"
+                          "(Config files are not changed until Execute.)"):
+            return
+        self._push_undo()
+        self._entries = [e for e in self._entries if e["path"] != path]
+        self._refresh_list()
+        if self._view_var.get() == "thumb":
+            self._draw_thumbs()
+        self._pending = True
 
     def _header_toggle(self, key: str):
         checked = [r for r in self._rows if r.is_checked()]
