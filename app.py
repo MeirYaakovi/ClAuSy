@@ -456,8 +456,11 @@ class ClausyApp:
         row("Claude Desktop (app) config  —  controls the 🔵 D toggle below  ( claude_desktop_config.json )",
             self._cd_var, 2, "cd")
 
+        self._cd_candidates_frame = ctk.CTkFrame(wrap, fg_color="transparent")
+        self._cd_candidates_frame.grid(row=4, column=0, sticky="ew")
+
         btn_f = ctk.CTkFrame(wrap, fg_color="transparent")
-        btn_f.grid(row=4, column=0, sticky="w", pady=24)
+        btn_f.grid(row=5, column=0, sticky="w", pady=24)
 
         def btn(parent, label, cmd, accent=False):
             c = ACCENT if accent else SURF3
@@ -475,14 +478,47 @@ class ClausyApp:
 
         self._status_lbl = ctk.CTkLabel(wrap, text="", fg_color="transparent",
                                         text_color=DIM, font=("Segoe UI", 10), anchor="w")
-        self._status_lbl.grid(row=5, column=0, sticky="w", pady=(6, 0))
+        self._status_lbl.grid(row=6, column=0, sticky="w", pady=(6, 0))
 
         self._yolo_banner = ctk.CTkLabel(
             wrap, text="", fg_color="#3a2a1a", text_color=WARN, corner_radius=6,
             font=("Segoe UI", 10, "bold"), anchor="w", justify="left", wraplength=760,
             padx=12, pady=10)
-        self._yolo_banner.grid(row=6, column=0, sticky="ew", pady=(10, 0))
+        self._yolo_banner.grid(row=7, column=0, sticky="ew", pady=(10, 0))
         self._yolo_banner.grid_remove()
+
+    def _refresh_cd_candidates(self):
+        for w in self._cd_candidates_frame.winfo_children():
+            w.destroy()
+        candidates = config_manager.find_cd_config_candidates()
+        if len(candidates) <= 1:
+            return
+        current = _norm(self._cd_var.get()) if self._cd_var.get().strip() else None
+        ctk.CTkLabel(
+            self._cd_candidates_frame,
+            text=f"⚠ Found {len(candidates)} possible Claude Desktop config files on this "
+                 "machine — make sure this is the one Claude Desktop actually uses. "
+                 "(A documented Windows bug lets the app's own 'Edit Config' button "
+                 "open the wrong one.)",
+            fg_color="transparent", text_color=WARN, font=("Segoe UI", 9, "bold"),
+            anchor="w", justify="left", wraplength=760
+        ).pack(anchor="w", pady=(4, 4))
+        for c in candidates:
+            row_f = ctk.CTkFrame(self._cd_candidates_frame, fg_color="transparent")
+            row_f.pack(fill="x", pady=2)
+            is_current = _norm(c) == current
+            ctk.CTkLabel(row_f, text=("✔ " if is_current else "  ") + c,
+                        fg_color="transparent", text_color=(CC_G if is_current else DIM),
+                        font=("Consolas", 9), anchor="w").pack(side="left", fill="x", expand=True)
+            if not is_current:
+                ctk.CTkButton(row_f, text="Use this", width=80, height=24, fg_color=SURF3,
+                             hover_color=ACCENT, text_color=TEXT,
+                             command=lambda p=c: self._use_cd_candidate(p)
+                             ).pack(side="right")
+
+    def _use_cd_candidate(self, path: str):
+        self._cd_var.set(path)
+        self._validate_paths(silent=True)
 
     def _check_permission_mode(self):
         mode = config_manager.get_permission_mode(self._cc_var.get())
@@ -833,6 +869,7 @@ class ClausyApp:
             else:
                 self._set_status("Config files look good ✔", CC_G)
         self._check_permission_mode()
+        self._refresh_cd_candidates()
 
     # ── entry management ─────────────────────────────────────────────────────
 

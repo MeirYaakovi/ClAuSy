@@ -12,27 +12,44 @@ class ConfigError(Exception):
 BACKUP_KEEP_COUNT = 5
 
 
-def auto_detect() -> dict:
-    cc = Path.home() / ".claude" / "settings.json"
-    appdata = os.environ.get("APPDATA", "")
-    localappdata = os.environ.get("LOCALAPPDATA", "")
-    cd_candidates = [
+def _cd_config_candidate_paths(appdata: str, localappdata: str, home: Path) -> list:
+    """Every location claude_desktop_config.json could plausibly live in,
+    whether or not it actually exists there."""
+    candidates = [
         # classic (non-store) Windows install
         Path(appdata) / "Claude" / "claude_desktop_config.json",
         # macOS
-        Path.home() / "Library" / "Application Support" / "Claude" / "claude_desktop_config.json",
+        home / "Library" / "Application Support" / "Claude" / "claude_desktop_config.json",
     ]
     # Windows Store / MSIX install: %LOCALAPPDATA%\Packages\Claude_<hash>\LocalCache\Roaming\Claude\...
     packages_dir = Path(localappdata) / "Packages"
     if packages_dir.is_dir():
         for pkg in packages_dir.glob("Claude_*"):
-            cd_candidates.append(
+            candidates.append(
                 pkg / "LocalCache" / "Roaming" / "Claude" / "claude_desktop_config.json"
             )
-    cd = next((p for p in cd_candidates if p.exists()), Path(""))
+    return candidates
+
+
+def find_cd_config_candidates() -> list:
+    """Every claude_desktop_config.json path that actually exists on this
+    machine. On Windows in particular, more than one can genuinely exist at
+    once (e.g. after switching from the classic installer to the Store app)
+    — Claude Desktop's own 'Edit Config' button has been documented to open
+    the wrong one in that situation, so callers should surface all of them
+    rather than silently picking one."""
+    appdata = os.environ.get("APPDATA", "")
+    localappdata = os.environ.get("LOCALAPPDATA", "")
+    candidates = _cd_config_candidate_paths(appdata, localappdata, Path.home())
+    return [str(p) for p in candidates if p.exists()]
+
+
+def auto_detect() -> dict:
+    cc = Path.home() / ".claude" / "settings.json"
+    candidates = find_cd_config_candidates()
     return {
         "cc_settings": str(cc),
-        "cd_config": str(cd) if cd.exists() else "",
+        "cd_config": candidates[0] if candidates else "",
     }
 
 

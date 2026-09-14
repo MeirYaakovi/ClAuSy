@@ -4,6 +4,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import config_manager
 
@@ -398,6 +399,67 @@ class TestAddDenyPatterns(unittest.TestCase):
             f.write("{broken")
         with self.assertRaises(config_manager.ConfigError):
             config_manager.add_deny_patterns(self.path, ["Read(**/.env)"])
+
+
+class TestFindCdConfigCandidates(unittest.TestCase):
+    def test_candidate_paths_include_classic_and_macos_locations(self):
+        paths = config_manager._cd_config_candidate_paths(
+            "C:\\AppData", "C:\\Local", Path("C:\\Users\\x"))
+        strs = [str(p) for p in paths]
+        self.assertIn(str(Path("C:\\AppData") / "Claude" / "claude_desktop_config.json"), strs)
+        self.assertIn(
+            str(Path("C:\\Users\\x") / "Library" / "Application Support" /
+                "Claude" / "claude_desktop_config.json"),
+            strs)
+
+    def test_includes_store_package_installs(self):
+        tmp = tempfile.mkdtemp()
+        (Path(tmp) / "Packages" / "Claude_abc123").mkdir(parents=True)
+        paths = config_manager._cd_config_candidate_paths("C:\\AppData", tmp, Path("C:\\Users\\x"))
+        self.assertTrue(any("Claude_abc123" in str(p) for p in paths))
+
+    def test_only_existing_paths_are_returned(self):
+        tmp = tempfile.mkdtemp()
+        appdata = os.path.join(tmp, "AppData")
+        classic_file = Path(appdata) / "Claude" / "claude_desktop_config.json"
+        classic_file.parent.mkdir(parents=True)
+        classic_file.write_text("{}")
+        localappdata = os.path.join(tmp, "Local")  # no Packages dir here
+        with mock.patch.dict(os.environ, {"APPDATA": appdata, "LOCALAPPDATA": localappdata}):
+            with mock.patch.object(config_manager.Path, "home",
+                                   return_value=Path(tmp) / "home"):
+                result = config_manager.find_cd_config_candidates()
+        self.assertEqual(result, [str(classic_file)])
+
+    def test_multiple_installs_all_returned(self):
+        tmp = tempfile.mkdtemp()
+        appdata = os.path.join(tmp, "AppData")
+        classic_file = Path(appdata) / "Claude" / "claude_desktop_config.json"
+        classic_file.parent.mkdir(parents=True)
+        classic_file.write_text("{}")
+        localappdata = os.path.join(tmp, "Local")
+        store_file = (Path(localappdata) / "Packages" / "Claude_xyz" /
+                      "LocalCache" / "Roaming" / "Claude" / "claude_desktop_config.json")
+        store_file.parent.mkdir(parents=True)
+        store_file.write_text("{}")
+        with mock.patch.dict(os.environ, {"APPDATA": appdata, "LOCALAPPDATA": localappdata}):
+            with mock.patch.object(config_manager.Path, "home",
+                                   return_value=Path(tmp) / "home"):
+                result = config_manager.find_cd_config_candidates()
+        self.assertEqual(set(result), {str(classic_file), str(store_file)})
+
+    def test_auto_detect_picks_first_candidate(self):
+        tmp = tempfile.mkdtemp()
+        appdata = os.path.join(tmp, "AppData")
+        classic_file = Path(appdata) / "Claude" / "claude_desktop_config.json"
+        classic_file.parent.mkdir(parents=True)
+        classic_file.write_text("{}")
+        localappdata = os.path.join(tmp, "Local")
+        with mock.patch.dict(os.environ, {"APPDATA": appdata, "LOCALAPPDATA": localappdata}):
+            with mock.patch.object(config_manager.Path, "home",
+                                   return_value=Path(tmp) / "home"):
+                result = config_manager.auto_detect()
+        self.assertEqual(result["cd_config"], str(classic_file))
 
 
 class TestGetPermissionMode(unittest.TestCase):
