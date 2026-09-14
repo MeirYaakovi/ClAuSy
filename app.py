@@ -294,6 +294,7 @@ class ClausyApp:
         self._rows:    list[DirectoryRow] = []
         self._pending  = False
         self._undo_stack: list[list[dict]] = []
+        self._legend_collapsed = False
 
         self._cc_var   = tk.StringVar()
         self._cd_var   = tk.StringVar()
@@ -487,8 +488,18 @@ class ClausyApp:
         # ── legend row — grouped by product, plain-language ────────────────────
         legend = ctk.CTkFrame(parent, fg_color=SURF2, corner_radius=0)
         legend.pack(fill="x", side="top")
-        legend_inner = ctk.CTkFrame(legend, fg_color="transparent")
-        legend_inner.pack(fill="x", padx=12, pady=5)
+
+        legend_head = ctk.CTkFrame(legend, fg_color="transparent")
+        legend_head.pack(fill="x", padx=12, pady=(4, 0))
+        self._legend_toggle_btn = ctk.CTkButton(
+            legend_head, text="▾ Legend", fg_color="transparent", hover_color=SURF3,
+            text_color=DIM, anchor="w", width=90, height=20, font=("Segoe UI", 9, "bold"),
+            command=self._toggle_legend)
+        self._legend_toggle_btn.pack(side="left")
+
+        self._legend_inner = ctk.CTkFrame(legend, fg_color="transparent")
+        self._legend_inner.pack(fill="x", padx=12, pady=5)
+        legend_inner = self._legend_inner
 
         legend_groups = [
             ("Claude Code (CLI):", [
@@ -563,6 +574,21 @@ class ClausyApp:
                                       text_color=DIM, font=("Segoe UI", 10))
         self._prog_lbl.pack(side="left", padx=8)
 
+    def _toggle_legend(self):
+        self._apply_legend_state(not self._legend_collapsed)
+        data = storage.load()
+        data["legend_collapsed"] = self._legend_collapsed
+        storage.save(data)
+
+    def _apply_legend_state(self, collapsed: bool):
+        self._legend_collapsed = collapsed
+        if collapsed:
+            self._legend_inner.pack_forget()
+            self._legend_toggle_btn.configure(text="▸ Legend")
+        else:
+            self._legend_inner.pack(fill="x", padx=12, pady=5)
+            self._legend_toggle_btn.configure(text="▾ Legend")
+
     @staticmethod
     def _configure_row_grid(frame):
         frame.grid_columnconfigure(2, weight=1, minsize=200)
@@ -591,6 +617,7 @@ class ClausyApp:
         self._sort_seg.set(SORT_LABELS.get(self._sort_var.get(), "Name A→Z"))
         self._view_seg.set(VIEW_LABELS.get(self._view_var.get(), "≡ List"))
         self._labels: dict = data.get("labels", {})
+        self._apply_legend_state(data.get("legend_collapsed", False))
         self._reload_entries()
         self._switch_view()
         self._validate_paths(silent=True)

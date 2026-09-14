@@ -12,6 +12,7 @@ _DEFAULTS = {
     "sort_mode": "name_asc",
     "window_maximized": True,
     "window_geometry": "",   # e.g. "1100x720+100+80" — used only when not maximized
+    "legend_collapsed": False,
 }
 
 
