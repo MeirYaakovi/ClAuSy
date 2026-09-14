@@ -962,8 +962,20 @@ class ClausyApp:
 
         text_f = ctk.CTkFrame(parent, fg_color="transparent")
         text_f.grid(row=row, column=1, sticky="ew", pady=6)
-        ctk.CTkLabel(text_f, text=scope_label, fg_color="transparent", text_color=TEXT,
-                    font=("Segoe UI", 10, "bold"), anchor="w").pack(anchor="w")
+        head_f = ctk.CTkFrame(text_f, fg_color="transparent")
+        head_f.pack(anchor="w", fill="x")
+        ctk.CTkLabel(head_f, text=scope_label, fg_color="transparent", text_color=TEXT,
+                    font=("Segoe UI", 10, "bold"), anchor="w").pack(side="left")
+        if exists and allow_create:
+            rtl = claude_meta.check_rtl_first_line(path)
+            if rtl and not rtl["ok"]:
+                warn = ctk.CTkLabel(
+                    head_f, text="⚠ RTL", fg_color="transparent", text_color="#e0a030",
+                    font=("Segoe UI", 9, "bold"))
+                warn.pack(side="left", padx=(8, 0))
+                Tooltip(warn, "This file has Hebrew text, but the first line isn't "
+                              "Hebrew — Obsidian won't auto-detect RTL for it.\n"
+                              "Add a Hebrew word to line 1 to fix this.")
         ctk.CTkLabel(text_f, text=path, fg_color="transparent", text_color=DIM,
                     font=("Consolas", 9), anchor="w").pack(anchor="w")
 

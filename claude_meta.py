@@ -10,6 +10,7 @@ from pathlib import Path
 
 FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
 FIELD_RE = re.compile(r"^(\w[\w-]*):\s*(.*)$")
+HEBREW_RE = re.compile(r"[֐-׿]")
 
 
 def global_claude_home() -> Path:
@@ -58,6 +59,28 @@ def find_claude_md_files(project_dirs: list) -> list:
             "exists": p.is_file(),
         })
     return out
+
+
+def check_rtl_first_line(path: str) -> dict | None:
+    """Obsidian auto-detects RTL only if the *first line* contains a Hebrew
+    character. Returns None if the file doesn't exist / can't be read,
+    otherwise {"has_hebrew", "first_line_hebrew", "ok"} — ok is False only
+    when the file has Hebrew content somewhere but not on line 1."""
+    p = Path(path)
+    if not p.is_file():
+        return None
+    try:
+        text = p.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    has_hebrew = bool(HEBREW_RE.search(text))
+    first_line = next((ln for ln in text.splitlines() if ln.strip()), "")
+    first_line_hebrew = bool(HEBREW_RE.search(first_line))
+    return {
+        "has_hebrew": has_hebrew,
+        "first_line_hebrew": first_line_hebrew,
+        "ok": (not has_hebrew) or first_line_hebrew,
+    }
 
 
 def _parse_frontmatter(text: str) -> dict:
