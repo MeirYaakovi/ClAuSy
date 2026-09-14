@@ -976,6 +976,19 @@ class ClausyApp:
                 Tooltip(warn, "This file has Hebrew text, but the first line isn't "
                               "Hebrew — Obsidian won't auto-detect RTL for it.\n"
                               "Add a Hebrew word to line 1 to fix this.")
+
+            stats = claude_meta.claude_md_stats(path)
+            if stats:
+                count_color = "#e0a030" if stats["too_long"] else OFF_TXT
+                count_lbl = ctk.CTkLabel(
+                    head_f, text=f"{stats['words']} words", fg_color="transparent",
+                    text_color=count_color, font=("Segoe UI", 9))
+                count_lbl.pack(side="left", padx=(8, 0))
+                if stats["too_long"]:
+                    Tooltip(count_lbl,
+                            f"{stats['words']} words / {stats['lines']} lines — this is "
+                            "long enough to eat into Claude's context budget on every "
+                            "session. Consider trimming it.")
         ctk.CTkLabel(text_f, text=path, fg_color="transparent", text_color=DIM,
                     font=("Consolas", 9), anchor="w").pack(anchor="w")
 

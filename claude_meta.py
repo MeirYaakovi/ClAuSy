@@ -83,6 +83,27 @@ def check_rtl_first_line(path: str) -> dict | None:
     }
 
 
+CLAUDE_MD_WORD_WARN_THRESHOLD = 1500  # rough context-budget guideline
+
+
+def claude_md_stats(path: str) -> dict | None:
+    """Word/line counts for a CLAUDE.md file, and whether it's long enough to
+    be worth trimming for context budget. Returns None if unreadable."""
+    p = Path(path)
+    if not p.is_file():
+        return None
+    try:
+        text = p.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    words = len(text.split())
+    return {
+        "words": words,
+        "lines": len(text.splitlines()),
+        "too_long": words > CLAUDE_MD_WORD_WARN_THRESHOLD,
+    }
+
+
 def _parse_frontmatter(text: str) -> dict:
     m = FRONTMATTER_RE.match(text)
     if not m:

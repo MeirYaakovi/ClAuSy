@@ -137,5 +137,33 @@ class TestCheckRtlFirstLine(unittest.TestCase):
         self.assertTrue(result["ok"])
 
 
+class TestClaudeMdStats(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.path = Path(self.tmp) / "CLAUDE.md"
+
+    def test_missing_file_returns_none(self):
+        self.assertIsNone(claude_meta.claude_md_stats(str(self.path)))
+
+    def test_counts_words_and_lines(self):
+        self.path.write_text("one two three\nfour five", encoding="utf-8")
+        result = claude_meta.claude_md_stats(str(self.path))
+        self.assertEqual(result["words"], 5)
+        self.assertEqual(result["lines"], 2)
+        self.assertFalse(result["too_long"])
+
+    def test_long_file_flagged(self):
+        self.path.write_text("word " * (claude_meta.CLAUDE_MD_WORD_WARN_THRESHOLD + 1),
+                             encoding="utf-8")
+        result = claude_meta.claude_md_stats(str(self.path))
+        self.assertTrue(result["too_long"])
+
+    def test_empty_file_not_flagged(self):
+        self.path.write_text("", encoding="utf-8")
+        result = claude_meta.claude_md_stats(str(self.path))
+        self.assertEqual(result["words"], 0)
+        self.assertFalse(result["too_long"])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
