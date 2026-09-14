@@ -156,6 +156,18 @@ def add_deny_patterns(cc_settings: str, patterns: list) -> int:
     return len(new)
 
 
+def file_fingerprint(path: str) -> tuple | None:
+    """(mtime_ns, size) for `path`, or None if it doesn't exist. Used to
+    detect whether a config file changed on disk since ClAuSy last read it
+    — Claude Code itself has a known bug where it silently rewrites
+    settings.json mid-session, and ClAuSy shouldn't blindly clobber that."""
+    try:
+        st = os.stat(path)
+    except OSError:
+        return None
+    return (st.st_mtime_ns, st.st_size)
+
+
 def get_permission_mode(cc_settings: str) -> str | None:
     """Returns permissions.defaultMode from cc_settings.json, or None if the
     file is missing/unreadable or the key isn't set."""

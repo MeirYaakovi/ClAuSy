@@ -332,6 +332,8 @@ class ClausyApp:
         self._pending  = False
         self._undo_stack: list[list[dict]] = []
         self._legend_collapsed = False
+        self._cc_fingerprint = None
+        self._cd_fingerprint = None
 
         self._cc_var   = tk.StringVar()
         self._cd_var   = tk.StringVar()
@@ -898,7 +900,14 @@ class ClausyApp:
         self._undo_stack.clear()
         self._undo_btn.configure(state="disabled", text_color=OFF_TXT)
         self._pending = False
+        self._capture_fingerprints()
         self._apply_sort(refresh=True)
+
+    def _capture_fingerprints(self):
+        """Snapshot cc/cd file state as of the last successful read, so
+        Execute can detect if either file changed on disk since then."""
+        self._cc_fingerprint = config_manager.file_fingerprint(self._cc_var.get())
+        self._cd_fingerprint = config_manager.file_fingerprint(self._cd_var.get())
 
     def _apply_sort(self, refresh: bool = True):
         key = self._sort_var.get()
@@ -1141,6 +1150,27 @@ class ClausyApp:
 
     # ── execute ───────────────────────────────────────────────────────────────
 
+    def _check_external_changes(self) -> bool:
+        """Returns True if it's safe to write (nothing changed on disk since
+        ClAuSy last read it, or the user confirmed overwriting anyway)."""
+        changed = []
+        if self._cc_var.get() and \
+                config_manager.file_fingerprint(self._cc_var.get()) != self._cc_fingerprint:
+            changed.append("Claude Code settings.json")
+        if self._cd_var.get() and \
+                config_manager.file_fingerprint(self._cd_var.get()) != self._cd_fingerprint:
+            changed.append("Claude Desktop config")
+        if not changed:
+            return True
+        return messagebox.askyesno(
+            "ClAuSy — File Changed Externally",
+            f"{' and '.join(changed)} changed on disk since ClAuSy last read "
+            "it — possibly edited by Claude Code itself, another program, or "
+            "another instance of ClAuSy.\n\n"
+            "Writing now will overwrite those external changes with ClAuSy's "
+            "in-memory version.\n\nOverwrite anyway? (Choose No, then use "
+            "Save & Reload first to pick up the external changes instead.)")
+
     def _execute_changes(self):
         for r in self._rows:
             r.sync()
@@ -1150,6 +1180,8 @@ class ClausyApp:
         if not cc and not cd:
             messagebox.showerror("ClAuSy",
                                  "No config paths set.\nGo to Settings tab first.")
+            return
+        if not self._check_external_changes():
             return
 
         # Snapshot the entries before handing them to the background thread —
@@ -1182,6 +1214,7 @@ class ClausyApp:
             self._prog_lbl.configure(text="Done ✓", text_color=CC_G)
             self._save_settings_data()
             self._pending = False
+            self._capture_fingerprints()
         else:
             self._prog_bar.set(0)
             self._prog_lbl.configure(text="Error", text_color=CC_R)

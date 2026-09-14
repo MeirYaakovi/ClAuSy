@@ -462,6 +462,38 @@ class TestFindCdConfigCandidates(unittest.TestCase):
         self.assertEqual(result["cd_config"], str(classic_file))
 
 
+class TestFileFingerprint(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.path = os.path.join(self.tmp, "settings.json")
+
+    def test_missing_file_returns_none(self):
+        self.assertIsNone(config_manager.file_fingerprint(self.path))
+
+    def test_existing_file_returns_tuple(self):
+        with open(self.path, "w") as f:
+            f.write("{}")
+        fp = config_manager.file_fingerprint(self.path)
+        self.assertIsInstance(fp, tuple)
+        self.assertEqual(len(fp), 2)
+
+    def test_changed_content_changes_fingerprint(self):
+        with open(self.path, "w") as f:
+            f.write("{}")
+        fp1 = config_manager.file_fingerprint(self.path)
+        with open(self.path, "w") as f:
+            f.write("{\"a\": 1}")
+        fp2 = config_manager.file_fingerprint(self.path)
+        self.assertNotEqual(fp1, fp2)
+
+    def test_unchanged_file_has_stable_fingerprint(self):
+        with open(self.path, "w") as f:
+            f.write("{}")
+        fp1 = config_manager.file_fingerprint(self.path)
+        fp2 = config_manager.file_fingerprint(self.path)
+        self.assertEqual(fp1, fp2)
+
+
 class TestGetPermissionMode(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
