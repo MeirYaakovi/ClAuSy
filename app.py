@@ -468,6 +468,27 @@ class ClausyApp:
                                         text_color=DIM, font=("Segoe UI", 10), anchor="w")
         self._status_lbl.grid(row=5, column=0, sticky="w", pady=(6, 0))
 
+        self._yolo_banner = ctk.CTkLabel(
+            wrap, text="", fg_color="#3a2a1a", text_color=WARN, corner_radius=6,
+            font=("Segoe UI", 10, "bold"), anchor="w", justify="left", wraplength=760,
+            padx=12, pady=10)
+        self._yolo_banner.grid(row=6, column=0, sticky="ew", pady=(10, 0))
+        self._yolo_banner.grid_remove()
+
+    def _check_permission_mode(self):
+        mode = config_manager.get_permission_mode(self._cc_var.get())
+        if mode == "bypassPermissions":
+            self._yolo_banner.configure(
+                text="⚠ Claude Code's default permission mode is 'bypassPermissions' "
+                     "(YOLO mode) — every action is auto-approved with no prompts at "
+                     "all. This mode has caused real data loss (e.g. an unconfirmed "
+                     "rm -rf wiping a user's home directory). Consider switching to "
+                     "'default' or 'acceptEdits' in settings.json unless you fully "
+                     "trust every command Claude Code might run here.")
+            self._yolo_banner.grid()
+        else:
+            self._yolo_banner.grid_remove()
+
     # ── Directories tab ───────────────────────────────────────────────────────
 
     def _build_dirs_tab(self, parent):
@@ -748,6 +769,7 @@ class ClausyApp:
                 self._set_status("  ·  ".join(errors), CC_R)
             else:
                 self._set_status("Config files look good ✔", CC_G)
+        self._check_permission_mode()
 
     # ── entry management ─────────────────────────────────────────────────────
 

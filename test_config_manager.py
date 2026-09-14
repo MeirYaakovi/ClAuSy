@@ -291,6 +291,38 @@ class TestValidatePath(unittest.TestCase):
         self.assertTrue(ok)
 
 
+class TestGetPermissionMode(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def _write(self, data):
+        p = os.path.join(self.tmp, "settings.json")
+        with open(p, "w", encoding="utf-8") as f:
+            json.dump(data, f)
+        return p
+
+    def test_blank_path_returns_none(self):
+        self.assertIsNone(config_manager.get_permission_mode(""))
+
+    def test_missing_file_returns_none(self):
+        self.assertIsNone(config_manager.get_permission_mode(
+            os.path.join(self.tmp, "missing.json")))
+
+    def test_no_default_mode_returns_none(self):
+        p = self._write({"permissions": {}})
+        self.assertIsNone(config_manager.get_permission_mode(p))
+
+    def test_reads_default_mode(self):
+        p = self._write({"permissions": {"defaultMode": "bypassPermissions"}})
+        self.assertEqual(config_manager.get_permission_mode(p), "bypassPermissions")
+
+    def test_corrupt_file_returns_none(self):
+        p = os.path.join(self.tmp, "bad.json")
+        with open(p, "w") as f:
+            f.write("{broken")
+        self.assertIsNone(config_manager.get_permission_mode(p))
+
+
 class TestFindOverlappingPaths(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()

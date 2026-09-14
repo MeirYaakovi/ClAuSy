@@ -73,6 +73,18 @@ def _save(path: str, data: dict):
         json.dump(data, f, indent=2, ensure_ascii=False)
 
 
+def get_permission_mode(cc_settings: str) -> str | None:
+    """Returns permissions.defaultMode from cc_settings.json, or None if the
+    file is missing/unreadable or the key isn't set."""
+    if not cc_settings:
+        return None
+    try:
+        data = _load(cc_settings)
+    except ConfigError:
+        return None
+    return data.get("permissions", {}).get("defaultMode")
+
+
 def find_overlapping_paths(paths: list) -> set:
     """Returns the subset of `paths` that is an ancestor (or descendant) of
     another path in the same list — e.g. tracking both C:\\proj and
