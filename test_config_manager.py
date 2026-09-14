@@ -85,6 +85,16 @@ class TestReadAllDirs(unittest.TestCase):
         result = config_manager.read_all_dirs(self.cc_path, "")
         self.assertEqual(result, {})
 
+    def test_blank_additional_directory_entry_is_ignored(self):
+        # Regression: an empty string in additionalDirectories used to
+        # normalize to "." and appear as a bogus phantom directory row.
+        self._write(self.cc_path, {
+            "permissions": {"additionalDirectories": [self.tracked, ""]}
+        })
+        result = config_manager.read_all_dirs(self.cc_path, "")
+        self.assertNotIn(".", result)
+        self.assertEqual(len(result), 1)
+
     def test_corrupt_cc_json_raises_config_error(self):
         with open(self.cc_path, "w") as f:
             f.write("{ not valid json }")
@@ -209,6 +219,24 @@ class TestApplyChanges(unittest.TestCase):
             f.write("not json at all")
         with self.assertRaises(config_manager.ConfigError):
             config_manager.apply_changes("", self.cd_path, [self._entry(cd=True)])
+
+    def test_invalid_path_entry_never_written(self):
+        # Regression: a phantom "." entry (or any non-absolute path) that
+        # somehow reaches apply_changes must never be persisted — it would
+        # silently overwrite/corrupt a real entry's position in the array.
+        self._write(self.cc_path, {
+            "permissions": {"additionalDirectories": [self.tracked]}
+        })
+        entries = [
+            self._entry(self.tracked, cc_additional=True),
+            {"path": ".", "cc_allow": False, "cc_additional": True, "cd": False},
+            {"path": "",  "cc_allow": False, "cc_additional": True, "cd": False},
+        ]
+        config_manager.apply_changes(self.cc_path, "", entries)
+        data = self._load(self.cc_path)
+        dirs = data["permissions"]["additionalDirectories"]
+        self.assertNotIn(".", dirs)
+        self.assertEqual(dirs, [self.tracked])
 
     def test_progress_callback_called(self):
         calls = []

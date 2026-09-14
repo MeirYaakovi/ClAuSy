@@ -1,10 +1,11 @@
-import tkinter as tk
+import customtkinter as ctk
 from app import ClausyApp
 
 
 def main():
-    root = tk.Tk()
-    root.geometry("960x640")
+    ctk.set_appearance_mode("dark")
+    root = ctk.CTk()
+    root.geometry("1100x720")
     root.state("zoomed")
     ClausyApp(root)
     root.mainloop()

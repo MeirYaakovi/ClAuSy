@@ -11,10 +11,20 @@ class ConfigError(Exception):
 def auto_detect() -> dict:
     cc = Path.home() / ".claude" / "settings.json"
     appdata = os.environ.get("APPDATA", "")
+    localappdata = os.environ.get("LOCALAPPDATA", "")
     cd_candidates = [
+        # classic (non-store) Windows install
         Path(appdata) / "Claude" / "claude_desktop_config.json",
+        # macOS
         Path.home() / "Library" / "Application Support" / "Claude" / "claude_desktop_config.json",
     ]
+    # Windows Store / MSIX install: %LOCALAPPDATA%\Packages\Claude_<hash>\LocalCache\Roaming\Claude\...
+    packages_dir = Path(localappdata) / "Packages"
+    if packages_dir.is_dir():
+        for pkg in packages_dir.glob("Claude_*"):
+            cd_candidates.append(
+                pkg / "LocalCache" / "Roaming" / "Claude" / "claude_desktop_config.json"
+            )
     cd = next((p for p in cd_candidates if p.exists()), Path(""))
     return {
         "cc_settings": str(cc),
@@ -54,6 +64,11 @@ def validate_path(path: str, cfg_type: str) -> tuple:
 def _save(path: str, data: dict):
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
+    if p.exists():
+        try:
+            (p.parent / (p.name + ".bak")).write_bytes(p.read_bytes())
+        except OSError:
+            pass
     with open(p, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
@@ -76,9 +91,10 @@ def read_all_dirs(cc_settings: str, cd_config: str) -> dict:
                 result[key]["cc_allow"] = True
 
         for p in perms.get("additionalDirectories", []):
-            key = os.path.normpath(p)
-            result.setdefault(key, {"cc_allow": False, "cc_additional": False, "cd": False})
-            result[key]["cc_additional"] = True
+            if os.path.isabs(p):
+                key = os.path.normpath(p)
+                result.setdefault(key, {"cc_allow": False, "cc_additional": False, "cd": False})
+                result[key]["cc_additional"] = True
 
     if cd_config:
         data = _load(cd_config)
@@ -97,10 +113,14 @@ def apply_changes(cc_settings: str, cd_config: str, entries: list, progress_cb=N
     Writes changes to each config file without touching unrelated content.
     progress_cb(pct: int) is called at 0, 33, 66, 100.
     entries: list of {"path", "cc_allow", "cc_additional", "cd"}.
+    Entries whose "path" is not an absolute filesystem path are dropped —
+    they can never legitimately reach here, but silently writing one out
+    (e.g. "." from a stray empty string) would corrupt the config file.
     """
-    cc_allow_dirs = [e["path"] for e in entries if e.get("cc_allow")]
-    cc_add_dirs   = [e["path"] for e in entries if e.get("cc_additional")]
-    cd_dirs       = [e["path"] for e in entries if e.get("cd")]
+    valid_entries = [e for e in entries if e.get("path") and os.path.isabs(e["path"])]
+    cc_allow_dirs = [e["path"] for e in valid_entries if e.get("cc_allow")]
+    cc_add_dirs   = [e["path"] for e in valid_entries if e.get("cc_additional")]
+    cd_dirs       = [e["path"] for e in valid_entries if e.get("cd")]
 
     if progress_cb:
         progress_cb(0)

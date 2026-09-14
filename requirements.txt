@@ -1,2 +1,1 @@
-# ClAuSy uses only the Python standard library (tkinter included).
-# No third-party packages required.
+customtkinter>=5.2
