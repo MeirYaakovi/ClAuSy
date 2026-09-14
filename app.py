@@ -446,6 +446,10 @@ class ClausyApp:
                               font=("Segoe UI", 14), width=20)
             lbl.grid(row=0, column=2, padx=(10, 0))
             self._val_labels[cfg_type] = lbl
+            ctk.CTkButton(f, text="↩ Restore", fg_color=SURF3, hover_color=ACCENT,
+                         text_color=TEXT, width=90, height=32,
+                         command=lambda ct=cfg_type, v=var: self._restore_backup(ct, v)
+                         ).grid(row=0, column=3, padx=(10, 0))
 
         row("Claude Code (CLI) settings file  —  controls the 🔴🟢 C toggles below  ( ~/.claude/settings.json )",
             self._cc_var, 0, "cc")
@@ -775,6 +779,35 @@ class ClausyApp:
             self._set_status(f"Added {added} deny rule(s) for secret files.", CC_G)
         else:
             self._set_status("All secret-file deny rules were already present.", DIM)
+
+    def _restore_backup(self, cfg_type: str, var: tk.StringVar):
+        path = var.get().strip()
+        label = "Claude Code settings" if cfg_type == "cc" else "Claude Desktop config"
+        if not path:
+            messagebox.showerror("ClAuSy", f"No path set for {label}.")
+            return
+        backups = config_manager.list_backups(path)
+        if not backups:
+            messagebox.showinfo("ClAuSy", f"No backups found yet for {label}.")
+            return
+        if self._pending:
+            if not messagebox.askyesno(
+                    "ClAuSy",
+                    "You have directory changes on the Directories tab that were "
+                    "never written (Execute Changes was never pressed).\n\n"
+                    "Restoring now will discard them and reload from disk. Continue?"):
+                return
+        if not messagebox.askyesno(
+                "ClAuSy — Restore Backup",
+                f"Restore {label} from its most recent backup "
+                f"({backups[-1].name})?\n\n"
+                "The current file content is itself backed up first, so this "
+                "can be undone by restoring again."):
+            return
+        config_manager.restore_last_backup(path)
+        self._reload_entries()
+        self._validate_paths(silent=True)
+        self._set_status(f"Restored {label} from backup.", CC_G)
 
     def _validate_paths(self, silent: bool = False):
         """Update ✔/✗ indicators next to each path field.

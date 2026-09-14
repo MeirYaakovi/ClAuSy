@@ -73,19 +73,39 @@ def list_backups(path: str) -> list:
     return sorted(p.parent.glob(p.name + ".*.bak"))
 
 
+def _rotate_backup(p: Path):
+    """Backs up `p`'s current content (if any) and prunes old backups
+    beyond BACKUP_KEEP_COUNT. No-op if `p` doesn't exist yet."""
+    if not p.exists():
+        return
+    try:
+        ts = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+        (p.parent / f"{p.name}.{ts}.bak").write_bytes(p.read_bytes())
+        for old in list_backups(str(p))[:-BACKUP_KEEP_COUNT]:
+            old.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
 def _save(path: str, data: dict):
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
-    if p.exists():
-        try:
-            ts = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
-            (p.parent / f"{p.name}.{ts}.bak").write_bytes(p.read_bytes())
-            for old in list_backups(path)[:-BACKUP_KEEP_COUNT]:
-                old.unlink(missing_ok=True)
-        except OSError:
-            pass
+    _rotate_backup(p)
     with open(p, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
+
+
+def restore_last_backup(path: str) -> bool:
+    """Restores `path` in-place from its most recent backup. The file's
+    current content (if any) is itself backed up first, so this can be
+    reversed by restoring again. Returns False if there's no backup."""
+    backups = list_backups(path)
+    if not backups:
+        return False
+    p = Path(path)
+    _rotate_backup(p)
+    p.write_bytes(backups[-1].read_bytes())
+    return True
 
 
 DEFAULT_DENY_SECRET_PATTERNS = [

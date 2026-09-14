@@ -330,6 +330,25 @@ class TestBackupRotation(unittest.TestCase):
         missing = os.path.join(self.tmp, "nosuchdir", "settings.json")
         self.assertEqual(config_manager.list_backups(missing), [])
 
+    def test_restore_with_no_backups_returns_false(self):
+        self.assertFalse(config_manager.restore_last_backup(self.path))
+
+    def test_restore_brings_back_previous_content(self):
+        config_manager._save(self.path, {"n": 0})
+        config_manager._save(self.path, {"n": 1})
+        ok = config_manager.restore_last_backup(self.path)
+        self.assertTrue(ok)
+        with open(self.path, encoding="utf-8") as f:
+            self.assertEqual(json.load(f), {"n": 0})
+
+    def test_restore_is_itself_reversible(self):
+        config_manager._save(self.path, {"n": 0})
+        config_manager._save(self.path, {"n": 1})
+        config_manager.restore_last_backup(self.path)  # back to n=0
+        config_manager.restore_last_backup(self.path)  # back to n=1
+        with open(self.path, encoding="utf-8") as f:
+            self.assertEqual(json.load(f), {"n": 1})
+
 
 class TestAddDenyPatterns(unittest.TestCase):
     def setUp(self):
