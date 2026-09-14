@@ -78,6 +78,46 @@ class TestFindAgents(unittest.TestCase):
         self.assertEqual(project_agents[0]["description"], "Has quotes")
 
 
+class TestFindAgentDescriptionIssues(unittest.TestCase):
+    def test_no_agents_no_issues(self):
+        self.assertEqual(claude_meta.find_agent_description_issues([]), {})
+
+    def test_good_unique_descriptions_no_issues(self):
+        agents = [
+            {"path": "a.md", "description": "Reviews Python code for security bugs"},
+            {"path": "b.md", "description": "Writes and runs unit tests for new features"},
+        ]
+        self.assertEqual(claude_meta.find_agent_description_issues(agents), {})
+
+    def test_missing_description_flagged(self):
+        agents = [{"path": "a.md", "description": ""}]
+        issues = claude_meta.find_agent_description_issues(agents)
+        self.assertIn("a.md", issues)
+        self.assertIn("No description set.", issues["a.md"][0])
+
+    def test_short_description_flagged(self):
+        agents = [{"path": "a.md", "description": "does stuff"}]
+        issues = claude_meta.find_agent_description_issues(agents)
+        self.assertIn("a.md", issues)
+        self.assertIn("very short", issues["a.md"][0])
+
+    def test_duplicate_descriptions_flagged_on_both(self):
+        agents = [
+            {"path": "a.md", "description": "Reviews code for security issues"},
+            {"path": "b.md", "description": "Reviews code for security issues"},
+        ]
+        issues = claude_meta.find_agent_description_issues(agents)
+        self.assertIn("a.md", issues)
+        self.assertIn("b.md", issues)
+        self.assertIn("identical", issues["a.md"][0])
+
+    def test_three_way_duplicate_counts_others_correctly(self):
+        desc = "Handles all the database migration tasks for this project"
+        agents = [{"path": f"{n}.md", "description": desc} for n in ("a", "b", "c")]
+        issues = claude_meta.find_agent_description_issues(agents)
+        self.assertIn("identical to 2 other subagents", issues["a.md"][0])
+
+
 class TestFindHooks(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()

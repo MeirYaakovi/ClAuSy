@@ -1368,6 +1368,7 @@ class ClausyApp:
         project_dirs = self._project_dirs()
         agents = claude_meta.find_agents(project_dirs)
         hooks  = claude_meta.find_hooks(project_dirs)
+        agent_issues = claude_meta.find_agent_description_issues(agents)
 
         r = 0
         self._agents_section_header(self._agents_scroll, r, f"Subagents ({len(agents)})")
@@ -1381,9 +1382,17 @@ class ClausyApp:
             ctk.CTkLabel(self._agents_scroll, text=a["scope_label"], fg_color="transparent",
                         text_color=DIM, font=("Segoe UI", 9), width=90, anchor="w"
                         ).grid(row=r, column=0, sticky="w", pady=3)
-            ctk.CTkLabel(self._agents_scroll, text=a["name"], fg_color="transparent",
-                        text_color=TEXT, font=("Segoe UI", 9, "bold"), width=140, anchor="w"
-                        ).grid(row=r, column=1, sticky="w", pady=3)
+            issues = agent_issues.get(a["path"])
+            name_f = ctk.CTkFrame(self._agents_scroll, fg_color="transparent", width=140)
+            name_f.grid(row=r, column=1, sticky="w", pady=3)
+            ctk.CTkLabel(name_f, text=a["name"], fg_color="transparent",
+                        text_color=TEXT, font=("Segoe UI", 9, "bold"), anchor="w"
+                        ).pack(side="left")
+            if issues:
+                warn = ctk.CTkLabel(name_f, text=" ⚠", fg_color="transparent",
+                                    text_color=WARN, font=("Segoe UI", 9, "bold"))
+                warn.pack(side="left")
+                Tooltip(warn, "\n".join(issues))
             ctk.CTkLabel(self._agents_scroll, text=a["description"] or "—", fg_color="transparent",
                         text_color=DIM, font=("Segoe UI", 9), anchor="w", justify="left"
                         ).grid(row=r, column=2, sticky="ew", padx=8, pady=3)

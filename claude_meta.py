@@ -154,6 +154,38 @@ def find_agents(project_dirs: list) -> list:
     return agents
 
 
+MIN_AGENT_DESCRIPTION_LENGTH = 20
+
+
+def find_agent_description_issues(agents: list) -> dict:
+    """Flags subagents (as returned by find_agents()) whose description is
+    missing, too short, or identical to another subagent's — vague or
+    overlapping descriptions cause inconsistent auto-delegation, since
+    Claude picks a subagent based on its description. Returns
+    {path: [issue_message, ...]}."""
+    issues: dict = {}
+    by_description: dict = {}
+    for a in agents:
+        desc = (a.get("description") or "").strip()
+        if not desc:
+            issues.setdefault(a["path"], []).append("No description set.")
+        elif len(desc) < MIN_AGENT_DESCRIPTION_LENGTH:
+            issues.setdefault(a["path"], []).append(
+                f"Description is very short ({len(desc)} characters) — may not "
+                "give Claude enough to decide when to delegate to this agent.")
+        if desc:
+            by_description.setdefault(desc, []).append(a["path"])
+    for desc, paths in by_description.items():
+        if len(paths) > 1:
+            for p in paths:
+                others = len(paths) - 1
+                issues.setdefault(p, []).append(
+                    f"Description is identical to {others} other subagent"
+                    f"{'s' if others != 1 else ''} — Claude may not reliably "
+                    "pick the right one.")
+    return issues
+
+
 def find_hooks(project_dirs: list) -> list:
     """Returns [{"scope","scope_label","event","path"}] — one row per hook
     event configured in the global or a project settings.json."""
