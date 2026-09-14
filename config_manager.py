@@ -85,6 +85,25 @@ def get_permission_mode(cc_settings: str) -> str | None:
     return data.get("permissions", {}).get("defaultMode")
 
 
+def find_allow_deny_conflicts(cc_settings: str) -> set:
+    """Returns normalized absolute paths that appear in permissions.deny AND
+    in permissions.allow or permissions.additionalDirectories in the same
+    cc_settings.json. Claude Code's deny rules always win over allow rules
+    on a matching path, so these entries are silently doing nothing."""
+    if not cc_settings:
+        return set()
+    try:
+        data = _load(cc_settings)
+    except ConfigError:
+        return set()
+    perms = data.get("permissions", {})
+    allow_paths = {os.path.normpath(p) for p in perms.get("allow", []) if os.path.isabs(p)}
+    add_paths = {os.path.normpath(p) for p in perms.get("additionalDirectories", [])
+                 if os.path.isabs(p)}
+    deny_paths = {os.path.normpath(p) for p in perms.get("deny", []) if os.path.isabs(p)}
+    return (allow_paths | add_paths) & deny_paths
+
+
 def find_overlapping_paths(paths: list) -> set:
     """Returns the subset of `paths` that is an ancestor (or descendant) of
     another path in the same list — e.g. tracking both C:\\proj and

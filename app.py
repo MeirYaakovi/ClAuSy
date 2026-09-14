@@ -198,7 +198,7 @@ class DirectoryRow:
 
     def __init__(self, parent, entry: dict, idx: int,
                  on_change=None, on_pre_change=None, is_overlap: bool = False,
-                 on_remove=None):
+                 on_remove=None, is_denied: bool = False):
         self.entry         = entry
         self.on_change     = on_change
         self.on_pre_change = on_pre_change
@@ -230,6 +230,10 @@ class DirectoryRow:
             warnings.append("This directory overlaps with another tracked directory "
                              "(one is a parent folder of the other) — their "
                              "permissions may be redundant.")
+        if is_denied:
+            warnings.append("This path is in BOTH an allow rule and a deny rule in "
+                             "settings.json — the deny rule always wins, so the allow "
+                             "grant here is silently doing nothing.")
         self.pl = ctk.CTkLabel(parent, text=(f"⚠ {path}" if warnings else path),
                                fg_color="transparent", text_color=(WARN if warnings else DIM),
                                font=("Consolas", 10), anchor="w", cursor="hand2")
@@ -833,11 +837,13 @@ class ClausyApp:
         self._rows.clear()
         overlaps = config_manager.find_overlapping_paths(
             [e.get("path", "") for e in self._entries])
+        denied = config_manager.find_allow_deny_conflicts(self._cc_var.get())
         for i, entry in enumerate(self._visible_entries()):
             r = DirectoryRow(self._sf, entry, i,
                              on_change=lambda: setattr(self, "_pending", True),
                              on_pre_change=self._push_undo,
                              is_overlap=_norm(entry.get("path", "")) in overlaps,
+                             is_denied=_norm(entry.get("path", "")) in denied,
                              on_remove=self._remove_single_path)
             r.place(i)
             self._rows.append(r)

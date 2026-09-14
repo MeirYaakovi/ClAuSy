@@ -323,6 +323,43 @@ class TestGetPermissionMode(unittest.TestCase):
         self.assertIsNone(config_manager.get_permission_mode(p))
 
 
+class TestFindAllowDenyConflicts(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.path = os.path.join(self.tmp, "settings.json")
+
+    def _write(self, permissions):
+        with open(self.path, "w", encoding="utf-8") as f:
+            json.dump({"permissions": permissions}, f)
+        return self.path
+
+    def test_blank_path_returns_empty(self):
+        self.assertEqual(config_manager.find_allow_deny_conflicts(""), set())
+
+    def test_no_conflict_returns_empty(self):
+        p = self._write({"allow": [r"C:\a"], "deny": [r"C:\b"]})
+        self.assertEqual(config_manager.find_allow_deny_conflicts(p), set())
+
+    def test_allow_and_deny_same_path_flagged(self):
+        p = self._write({"allow": [r"C:\a"], "deny": [r"C:\a"]})
+        self.assertEqual(config_manager.find_allow_deny_conflicts(p),
+                         {os.path.normpath(r"C:\a")})
+
+    def test_additional_directories_and_deny_same_path_flagged(self):
+        p = self._write({"additionalDirectories": [r"C:\a"], "deny": [r"C:\a"]})
+        self.assertEqual(config_manager.find_allow_deny_conflicts(p),
+                         {os.path.normpath(r"C:\a")})
+
+    def test_relative_deny_patterns_ignored(self):
+        p = self._write({"allow": [r"C:\a"], "deny": ["Bash(rm:*)"]})
+        self.assertEqual(config_manager.find_allow_deny_conflicts(p), set())
+
+    def test_corrupt_file_returns_empty(self):
+        with open(self.path, "w") as f:
+            f.write("{broken")
+        self.assertEqual(config_manager.find_allow_deny_conflicts(self.path), set())
+
+
 class TestFindOverlappingPaths(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
