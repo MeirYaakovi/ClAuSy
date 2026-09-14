@@ -73,6 +73,27 @@ def _save(path: str, data: dict):
         json.dump(data, f, indent=2, ensure_ascii=False)
 
 
+def find_overlapping_paths(paths: list) -> set:
+    """Returns the subset of `paths` that is an ancestor (or descendant) of
+    another path in the same list — e.g. tracking both C:\\proj and
+    C:\\proj\\sub is redundant, since permissions on the parent already
+    cover the child."""
+    norm = [os.path.normpath(p) for p in paths if p]
+    overlapping = set()
+    for a in norm:
+        for b in norm:
+            if a == b:
+                continue
+            try:
+                ancestor = os.path.commonpath([a, b]) == a
+            except ValueError:
+                ancestor = False  # different drives, or a mix of abs/relative
+            if ancestor:
+                overlapping.add(a)
+                overlapping.add(b)
+    return overlapping
+
+
 def read_all_dirs(cc_settings: str, cd_config: str) -> dict:
     """
     Returns {normalised_path: {"cc_allow": bool, "cc_additional": bool, "cd": bool}}.

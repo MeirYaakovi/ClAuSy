@@ -185,7 +185,7 @@ class DirectoryRow:
     """One row in the list view — placed directly on a CTkScrollableFrame's grid."""
 
     def __init__(self, parent, entry: dict, idx: int,
-                 on_change=None, on_pre_change=None):
+                 on_change=None, on_pre_change=None, is_overlap: bool = False):
         self.entry         = entry
         self.on_change     = on_change
         self.on_pre_change = on_pre_change
@@ -208,14 +208,20 @@ class DirectoryRow:
         path = entry.get("path", "")
         has_permission = any(entry.get(k) for k in ("cc_allow", "cc_additional", "cd"))
         missing = bool(path) and has_permission and not os.path.isdir(path)
-        self.pl = ctk.CTkLabel(parent, text=(f"⚠ {path}" if missing else path),
-                               fg_color="transparent", text_color=(WARN if missing else DIM),
+        warnings = []
+        if missing:
+            warnings.append("This directory has permissions granted, but no longer "
+                             "exists on disk — those grants aren't doing anything.")
+        if is_overlap:
+            warnings.append("This directory overlaps with another tracked directory "
+                             "(one is a parent folder of the other) — their "
+                             "permissions may be redundant.")
+        self.pl = ctk.CTkLabel(parent, text=(f"⚠ {path}" if warnings else path),
+                               fg_color="transparent", text_color=(WARN if warnings else DIM),
                                font=("Consolas", 10), anchor="w", cursor="hand2")
         self.pl.bind("<Double-Button-1>", self._open_dir)
-        if missing:
-            Tooltip(self.pl, "This directory has permissions granted, but no longer "
-                              "exists on disk — those grants aren't doing anything.\n"
-                              "Restore the folder, or remove it from the list.")
+        if warnings:
+            Tooltip(self.pl, "\n\n".join(warnings))
 
         self.t_r = ToggleCircle(parent, "C", CC_R,
                                  state=entry.get("cc_allow", False),
@@ -704,10 +710,13 @@ class ClausyApp:
         for w in self._sf.winfo_children():
             w.destroy()
         self._rows.clear()
+        overlaps = config_manager.find_overlapping_paths(
+            [e.get("path", "") for e in self._entries])
         for i, entry in enumerate(self._entries):
             r = DirectoryRow(self._sf, entry, i,
                              on_change=lambda: setattr(self, "_pending", True),
-                             on_pre_change=self._push_undo)
+                             on_pre_change=self._push_undo,
+                             is_overlap=_norm(entry.get("path", "")) in overlaps)
             r.place(i)
             self._rows.append(r)
         self._configure_row_grid(self._sf)

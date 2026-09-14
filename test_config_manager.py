@@ -291,5 +291,39 @@ class TestValidatePath(unittest.TestCase):
         self.assertTrue(ok)
 
 
+class TestFindOverlappingPaths(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.parent = os.path.join(self.tmp, "proj")
+        self.child = os.path.join(self.tmp, "proj", "sub")
+        self.sibling = os.path.join(self.tmp, "other")
+
+    def test_no_overlap_returns_empty(self):
+        result = config_manager.find_overlapping_paths([self.parent, self.sibling])
+        self.assertEqual(result, set())
+
+    def test_parent_and_child_flagged(self):
+        result = config_manager.find_overlapping_paths([self.parent, self.child])
+        self.assertEqual(result, {os.path.normpath(self.parent), os.path.normpath(self.child)})
+
+    def test_unrelated_sibling_not_flagged(self):
+        result = config_manager.find_overlapping_paths([self.parent, self.child, self.sibling])
+        self.assertNotIn(os.path.normpath(self.sibling), result)
+
+    def test_similar_prefix_not_treated_as_overlap(self):
+        # "proj" is not an ancestor of "proj2" just because it's a string prefix
+        proj2 = os.path.join(self.tmp, "proj2")
+        result = config_manager.find_overlapping_paths([self.parent, proj2])
+        self.assertEqual(result, set())
+
+    def test_blank_paths_ignored(self):
+        result = config_manager.find_overlapping_paths([self.parent, "", None])
+        self.assertEqual(result, set())
+
+    def test_single_path_has_no_overlap(self):
+        result = config_manager.find_overlapping_paths([self.parent])
+        self.assertEqual(result, set())
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
