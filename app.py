@@ -335,7 +335,19 @@ class ClausyApp:
                 "(Execute Changes was never pressed).\n\n"
                 "Quit anyway and lose them?"):
                 return
+        self._save_window_state()
         self.root.destroy()
+
+    def _save_window_state(self):
+        try:
+            maximized = self.root.state() == "zoomed"
+        except tk.TclError:
+            maximized = True
+        data = storage.load()
+        data["window_maximized"] = maximized
+        if not maximized:
+            data["window_geometry"] = self.root.geometry()
+        storage.save(data)
 
     # ── Settings tab ─────────────────────────────────────────────────────────
 
