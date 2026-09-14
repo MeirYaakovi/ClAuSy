@@ -291,6 +291,46 @@ class TestValidatePath(unittest.TestCase):
         self.assertTrue(ok)
 
 
+class TestBackupRotation(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.path = os.path.join(self.tmp, "settings.json")
+
+    def test_no_backups_for_a_file_that_never_existed(self):
+        config_manager._save(self.path, {"a": 1})
+        self.assertEqual(config_manager.list_backups(self.path), [])
+
+    def test_first_overwrite_creates_one_backup(self):
+        config_manager._save(self.path, {"a": 1})
+        config_manager._save(self.path, {"a": 2})
+        backups = config_manager.list_backups(self.path)
+        self.assertEqual(len(backups), 1)
+        with open(backups[0], encoding="utf-8") as f:
+            self.assertEqual(json.load(f), {"a": 1})
+
+    def test_keeps_only_last_N_backups(self):
+        config_manager._save(self.path, {"n": 0})
+        for i in range(1, config_manager.BACKUP_KEEP_COUNT + 3):
+            config_manager._save(self.path, {"n": i})
+        backups = config_manager.list_backups(self.path)
+        self.assertEqual(len(backups), config_manager.BACKUP_KEEP_COUNT)
+
+    def test_list_backups_oldest_first(self):
+        config_manager._save(self.path, {"n": 0})
+        config_manager._save(self.path, {"n": 1})
+        config_manager._save(self.path, {"n": 2})
+        backups = config_manager.list_backups(self.path)
+        contents = []
+        for b in backups:
+            with open(b, encoding="utf-8") as f:
+                contents.append(json.load(f)["n"])
+        self.assertEqual(contents, sorted(contents))
+
+    def test_no_backup_dir_returns_empty(self):
+        missing = os.path.join(self.tmp, "nosuchdir", "settings.json")
+        self.assertEqual(config_manager.list_backups(missing), [])
+
+
 class TestAddDenyPatterns(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()

@@ -1402,8 +1402,9 @@ class ClausyApp:
                  "(settings.json and claude_desktop_config.json) get rewritten, and "
                  "only the directory-related keys are touched — everything else in "
                  "those files (other settings, other permission rules, other MCP "
-                 "servers) is preserved untouched. A .bak backup of each file is kept "
-                 "alongside it before every write.")
+                 "servers) is preserved untouched. A timestamped .bak backup of each "
+                 f"file is kept alongside it before every write (last "
+                 f"{config_manager.BACKUP_KEEP_COUNT} kept, older ones pruned).")
 
         section("Undo",
                  "Up to 30 steps of toggle history, kept only for this open session. "

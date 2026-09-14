@@ -1,11 +1,15 @@
 """Read/write Claude Code and Claude Desktop config files safely."""
 import json
 import os
+from datetime import datetime
 from pathlib import Path
 
 
 class ConfigError(Exception):
     """Raised when a config file exists but cannot be parsed."""
+
+
+BACKUP_KEEP_COUNT = 5
 
 
 def auto_detect() -> dict:
@@ -61,12 +65,23 @@ def validate_path(path: str, cfg_type: str) -> tuple:
     return True, ""
 
 
+def list_backups(path: str) -> list:
+    """Returns backup files for `path`, oldest first."""
+    p = Path(path)
+    if not p.parent.is_dir():
+        return []
+    return sorted(p.parent.glob(p.name + ".*.bak"))
+
+
 def _save(path: str, data: dict):
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
     if p.exists():
         try:
-            (p.parent / (p.name + ".bak")).write_bytes(p.read_bytes())
+            ts = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+            (p.parent / f"{p.name}.{ts}.bak").write_bytes(p.read_bytes())
+            for old in list_backups(path)[:-BACKUP_KEEP_COUNT]:
+                old.unlink(missing_ok=True)
         except OSError:
             pass
     with open(p, "w", encoding="utf-8") as f:
