@@ -3,6 +3,7 @@ import copy
 import os
 import threading
 import time
+import urllib.parse
 import webbrowser
 import tkinter as tk
 from tkinter import filedialog, messagebox
@@ -39,6 +40,17 @@ THUMB_H = 148
 CPAD    = 14
 
 DOCS_SCHEDULED_TASKS_URL = "https://code.claude.com/docs/en/desktop-scheduled-tasks"
+
+REPORT_ISSUE_URL = (
+    "https://github.com/MeirYaakovi/ClAuSy/issues/new"
+    "?title=" + urllib.parse.quote("Confusing config or permission behavior")
+    + "&body=" + urllib.parse.quote(
+        "**What were you trying to do?**\n\n\n"
+        "**What was confusing or unexpected?**\n\n\n"
+        "**Steps to reproduce (if applicable):**\n\n\n"
+        "(Optional) OS + ClAuSy version:\n"
+    )
+)
 
 # plain-language names/descriptions for each toggle, grouped by product —
 # used in the legend, column tooltips, confirmation dialogs, and Explained tab.
@@ -448,7 +460,9 @@ class ClausyApp:
         btn(btn_f, "Auto-Detect",   self._auto_detect        ).pack(side="left", padx=(0, 10))
         btn(btn_f, "Save & Reload", self._save_and_reload,
             accent=True                                       ).pack(side="left", padx=(0, 10))
-        btn(btn_f, "✔ Check",       self._validate_paths      ).pack(side="left")
+        btn(btn_f, "✔ Check",       self._validate_paths      ).pack(side="left", padx=(0, 10))
+        btn(btn_f, "🐞 Report Confusing Config",
+            lambda: webbrowser.open(REPORT_ISSUE_URL)          ).pack(side="left")
 
         self._status_lbl = ctk.CTkLabel(wrap, text="", fg_color="transparent",
                                         text_color=DIM, font=("Segoe UI", 10), anchor="w")
