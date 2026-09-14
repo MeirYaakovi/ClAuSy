@@ -83,12 +83,17 @@ def check_rtl_first_line(path: str) -> dict | None:
     }
 
 
-CLAUDE_MD_WORD_WARN_THRESHOLD = 1500  # rough context-budget guideline
+CLAUDE_MD_LINE_WARN_THRESHOLD = 150  # Claude's attention on CLAUDE.md drops off
+                                      # sharply past roughly this many lines —
+                                      # a line-count cliff, not a word-count one.
 
 
 def claude_md_stats(path: str) -> dict | None:
     """Word/line counts for a CLAUDE.md file, and whether it's long enough to
-    be worth trimming for context budget. Returns None if unreadable."""
+    be worth trimming. "too_long" is based on line count — Claude's practical
+    attention drop-off on CLAUDE.md tracks line count, not word count, so a
+    file can be short in words but still too long in lines (or vice versa).
+    Returns None if unreadable."""
     p = Path(path)
     if not p.is_file():
         return None
@@ -96,11 +101,11 @@ def claude_md_stats(path: str) -> dict | None:
         text = p.read_text(encoding="utf-8")
     except OSError:
         return None
-    words = len(text.split())
+    lines = len(text.splitlines())
     return {
-        "words": words,
-        "lines": len(text.splitlines()),
-        "too_long": words > CLAUDE_MD_WORD_WARN_THRESHOLD,
+        "words": len(text.split()),
+        "lines": lines,
+        "too_long": lines > CLAUDE_MD_LINE_WARN_THRESHOLD,
     }
 
 

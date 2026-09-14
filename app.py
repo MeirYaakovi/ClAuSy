@@ -1137,14 +1137,15 @@ class ClausyApp:
             if stats:
                 count_color = WARN if stats["too_long"] else OFF_TXT
                 count_lbl = ctk.CTkLabel(
-                    head_f, text=f"{stats['words']} words", fg_color="transparent",
+                    head_f, text=f"{stats['lines']} lines", fg_color="transparent",
                     text_color=count_color, font=("Segoe UI", 9))
                 count_lbl.pack(side="left", padx=(8, 0))
                 if stats["too_long"]:
                     Tooltip(count_lbl,
-                            f"{stats['words']} words / {stats['lines']} lines — this is "
-                            "long enough to eat into Claude's context budget on every "
-                            "session. Consider trimming it.")
+                            f"{stats['lines']} lines / {stats['words']} words — Claude's "
+                            "attention on CLAUDE.md drops off sharply past roughly "
+                            f"{claude_meta.CLAUDE_MD_LINE_WARN_THRESHOLD} lines. "
+                            "Consider trimming it.")
         ctk.CTkLabel(text_f, text=path, fg_color="transparent", text_color=DIM,
                     font=("Consolas", 9), anchor="w").pack(anchor="w")
 

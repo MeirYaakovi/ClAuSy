@@ -152,11 +152,20 @@ class TestClaudeMdStats(unittest.TestCase):
         self.assertEqual(result["lines"], 2)
         self.assertFalse(result["too_long"])
 
-    def test_long_file_flagged(self):
-        self.path.write_text("word " * (claude_meta.CLAUDE_MD_WORD_WARN_THRESHOLD + 1),
-                             encoding="utf-8")
+    def test_many_lines_flagged_even_if_short_words(self):
+        # short one-word lines: few words overall, but well past the line cap
+        text = "\n".join(["x"] * (claude_meta.CLAUDE_MD_LINE_WARN_THRESHOLD + 1))
+        self.path.write_text(text, encoding="utf-8")
         result = claude_meta.claude_md_stats(str(self.path))
         self.assertTrue(result["too_long"])
+
+    def test_many_words_on_few_lines_not_flagged(self):
+        # a single very long line: lots of words, but only 1 line
+        text = "word " * 5000
+        self.path.write_text(text, encoding="utf-8")
+        result = claude_meta.claude_md_stats(str(self.path))
+        self.assertEqual(result["lines"], 1)
+        self.assertFalse(result["too_long"])
 
     def test_empty_file_not_flagged(self):
         self.path.write_text("", encoding="utf-8")
