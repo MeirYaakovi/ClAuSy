@@ -476,6 +476,14 @@ class ClausyApp:
             text_color=TEXT, height=30)
         self._view_seg.pack(side="left")
 
+        self._search_var = tk.StringVar()
+        self._search_entry = ctk.CTkEntry(
+            inner, textvariable=self._search_var, placeholder_text="🔍 Search label or path…",
+            fg_color=SURF, text_color=TEXT, border_color=OFF, border_width=1,
+            font=("Segoe UI", 10), height=30, width=220)
+        self._search_entry.pack(side="right")
+        self._search_var.trace_add("write", lambda *_: self._on_search_changed())
+
         # ── column headers ────────────────────────────────────────────────────
         self._header = ctk.CTkFrame(parent, fg_color=SURF3, corner_radius=0)
         self._header.pack(fill="x", side="top")
@@ -754,13 +762,25 @@ class ClausyApp:
             if self._view_var.get() == "thumb":
                 self._draw_thumbs()
 
+    def _visible_entries(self) -> list:
+        q = self._search_var.get().strip().lower()
+        if not q:
+            return self._entries
+        return [e for e in self._entries
+                if q in e.get("label", "").lower() or q in e.get("path", "").lower()]
+
+    def _on_search_changed(self):
+        self._refresh_list()
+        if self._view_var.get() == "thumb":
+            self._draw_thumbs()
+
     def _refresh_list(self):
         for w in self._sf.winfo_children():
             w.destroy()
         self._rows.clear()
         overlaps = config_manager.find_overlapping_paths(
             [e.get("path", "") for e in self._entries])
-        for i, entry in enumerate(self._entries):
+        for i, entry in enumerate(self._visible_entries()):
             r = DirectoryRow(self._sf, entry, i,
                              on_change=lambda: setattr(self, "_pending", True),
                              on_pre_change=self._push_undo,
@@ -889,8 +909,9 @@ class ClausyApp:
 
         cw   = cv.winfo_width() or 600
         cols = max(1, (cw - CPAD) // (THUMB_W + CPAD))
+        visible = self._visible_entries()
 
-        for i, entry in enumerate(self._entries):
+        for i, entry in enumerate(visible):
             col = i % cols
             row = i // cols
             x0  = CPAD + col * (THUMB_W + CPAD)
@@ -944,7 +965,7 @@ class ClausyApp:
                 "badges": badge_centers,
             })
 
-        total_rows = (len(self._entries) + cols - 1) // cols if self._entries else 1
+        total_rows = (len(visible) + cols - 1) // cols if visible else 1
         cv.configure(scrollregion=(0, 0, cw, CPAD + total_rows * (THUMB_H + CPAD)))
 
     def _thumb_click(self, event):
