@@ -324,6 +324,23 @@ class ClausyApp:
 
         self._build_ui()
         self._load_settings()
+        self._bind_shortcuts()
+
+    def _bind_shortcuts(self):
+        self.root.bind_all("<Control-z>", lambda e: self._undo())
+        self.root.bind_all("<Control-f>", self._focus_search)
+        self.root.bind_all("<Delete>", self._on_delete_key)
+
+    def _focus_search(self, event=None):
+        self.nb.set("Directories")
+        self._search_entry.focus_set()
+        return "break"
+
+    def _on_delete_key(self, event=None):
+        if isinstance(self.root.focus_get(), tk.Entry):
+            return  # let normal text-field deletion happen
+        if self.nb.get() == "Directories":
+            self._delete_selected()
 
     # ── UI skeleton ───────────────────────────────────────────────────────────
 
