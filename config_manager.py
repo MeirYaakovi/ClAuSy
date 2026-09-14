@@ -73,6 +73,37 @@ def _save(path: str, data: dict):
         json.dump(data, f, indent=2, ensure_ascii=False)
 
 
+DEFAULT_DENY_SECRET_PATTERNS = [
+    "Read(./.env)",
+    "Read(./.env.*)",
+    "Read(**/.env)",
+    "Read(**/.env.*)",
+    "Read(**/*.pem)",
+    "Read(**/*.key)",
+    "Read(**/id_rsa)",
+    "Read(**/id_ed25519)",
+    "Read(**/credentials.json)",
+    "Read(**/.aws/**)",
+    "Read(**/.ssh/**)",
+]
+
+
+def add_deny_patterns(cc_settings: str, patterns: list) -> int:
+    """Merges `patterns` into permissions.deny in cc_settings.json, preserving
+    everything else in the file. Returns how many patterns were newly added
+    (patterns already present are left as-is, not duplicated)."""
+    if not cc_settings:
+        return 0
+    data = _load(cc_settings)
+    data.setdefault("permissions", {})
+    existing = data["permissions"].get("deny", [])
+    new = [p for p in patterns if p not in existing]
+    if new:
+        data["permissions"]["deny"] = existing + new
+        _save(cc_settings, data)
+    return len(new)
+
+
 def get_permission_mode(cc_settings: str) -> str | None:
     """Returns permissions.defaultMode from cc_settings.json, or None if the
     file is missing/unreadable or the key isn't set."""

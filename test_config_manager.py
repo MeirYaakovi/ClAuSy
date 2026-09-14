@@ -291,6 +291,56 @@ class TestValidatePath(unittest.TestCase):
         self.assertTrue(ok)
 
 
+class TestAddDenyPatterns(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.path = os.path.join(self.tmp, "settings.json")
+
+    def _write(self, data):
+        with open(self.path, "w", encoding="utf-8") as f:
+            json.dump(data, f)
+        return self.path
+
+    def test_blank_path_is_noop(self):
+        self.assertEqual(config_manager.add_deny_patterns("", ["Read(**/.env)"]), 0)
+
+    def test_adds_new_patterns_to_missing_deny_key(self):
+        p = self._write({"permissions": {"allow": ["C:\\a"]}})
+        added = config_manager.add_deny_patterns(p, ["Read(**/.env)", "Read(**/*.pem)"])
+        self.assertEqual(added, 2)
+        with open(p, encoding="utf-8") as f:
+            data = json.load(f)
+        self.assertEqual(data["permissions"]["deny"], ["Read(**/.env)", "Read(**/*.pem)"])
+        self.assertEqual(data["permissions"]["allow"], ["C:\\a"])  # untouched
+
+    def test_does_not_duplicate_existing_patterns(self):
+        p = self._write({"permissions": {"deny": ["Read(**/.env)"]}})
+        added = config_manager.add_deny_patterns(p, ["Read(**/.env)", "Read(**/*.pem)"])
+        self.assertEqual(added, 1)
+        with open(p, encoding="utf-8") as f:
+            data = json.load(f)
+        self.assertEqual(data["permissions"]["deny"], ["Read(**/.env)", "Read(**/*.pem)"])
+
+    def test_all_already_present_writes_nothing_new(self):
+        p = self._write({"permissions": {"deny": ["Read(**/.env)"]}})
+        added = config_manager.add_deny_patterns(p, ["Read(**/.env)"])
+        self.assertEqual(added, 0)
+
+    def test_creates_file_if_missing(self):
+        p = os.path.join(self.tmp, "new_settings.json")
+        added = config_manager.add_deny_patterns(p, ["Read(**/.env)"])
+        self.assertEqual(added, 1)
+        with open(p, encoding="utf-8") as f:
+            data = json.load(f)
+        self.assertEqual(data["permissions"]["deny"], ["Read(**/.env)"])
+
+    def test_corrupt_file_raises_config_error(self):
+        with open(self.path, "w") as f:
+            f.write("{broken")
+        with self.assertRaises(config_manager.ConfigError):
+            config_manager.add_deny_patterns(self.path, ["Read(**/.env)"])
+
+
 class TestGetPermissionMode(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()

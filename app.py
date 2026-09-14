@@ -465,6 +465,7 @@ class ClausyApp:
         btn(btn_f, "Save & Reload", self._save_and_reload,
             accent=True                                       ).pack(side="left", padx=(0, 10))
         btn(btn_f, "✔ Check",       self._validate_paths      ).pack(side="left", padx=(0, 10))
+        btn(btn_f, "🔒 Deny Secrets", self._deny_secrets_preset).pack(side="left", padx=(0, 10))
         btn(btn_f, "🐞 Report Confusing Config",
             lambda: webbrowser.open(REPORT_ISSUE_URL)          ).pack(side="left")
 
@@ -749,6 +750,31 @@ class ClausyApp:
 
     def _set_status(self, msg: str, color: str = DIM):
         self._status_lbl.configure(text=msg, text_color=color)
+
+    def _deny_secrets_preset(self):
+        cc = self._cc_var.get().strip()
+        if not cc:
+            messagebox.showerror("ClAuSy", "No Claude Code settings.json path set.\n"
+                                           "Go to Settings and set/Auto-Detect it first.")
+            return
+        patterns = config_manager.DEFAULT_DENY_SECRET_PATTERNS
+        preview = "\n".join(f"  • {p}" for p in patterns)
+        if not messagebox.askyesno(
+                "ClAuSy — Deny Secrets Preset",
+                "Add deny rules for common secret files (.env, *.pem, *.key, "
+                "id_rsa, credentials.json, .aws/, .ssh/) to settings.json?\n\n"
+                f"{preview}\n\n"
+                "Existing deny rules are kept; only missing ones are added."):
+            return
+        try:
+            added = config_manager.add_deny_patterns(cc, patterns)
+        except config_manager.ConfigError as e:
+            messagebox.showerror("ClAuSy", f"Could not update settings.json:\n\n{e}")
+            return
+        if added:
+            self._set_status(f"Added {added} deny rule(s) for secret files.", CC_G)
+        else:
+            self._set_status("All secret-file deny rules were already present.", DIM)
 
     def _validate_paths(self, silent: bool = False):
         """Update ✔/✗ indicators next to each path field.
