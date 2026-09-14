@@ -31,6 +31,7 @@ CC_G    = "#27ae60"   # green — additionalDirectories
 CD_B    = "#2980b9"   # blue  — Desktop MCP
 OFF     = "#3a3a5c"
 OFF_TXT = "#6060a0"
+WARN    = "#e0a030"   # missing paths, too-long docs, RTL warnings, etc.
 
 ICON_S  = 24
 THUMB_W = 160
@@ -204,10 +205,17 @@ class DirectoryRow:
         self.le.bind("<FocusOut>", lambda e: self._sync_label())
         self.le.bind("<Return>",   lambda e: self._sync_label())
 
-        self.pl = ctk.CTkLabel(parent, text=entry.get("path", ""),
-                               fg_color="transparent", text_color=DIM,
+        path = entry.get("path", "")
+        has_permission = any(entry.get(k) for k in ("cc_allow", "cc_additional", "cd"))
+        missing = bool(path) and has_permission and not os.path.isdir(path)
+        self.pl = ctk.CTkLabel(parent, text=(f"⚠ {path}" if missing else path),
+                               fg_color="transparent", text_color=(WARN if missing else DIM),
                                font=("Consolas", 10), anchor="w", cursor="hand2")
         self.pl.bind("<Double-Button-1>", self._open_dir)
+        if missing:
+            Tooltip(self.pl, "This directory has permissions granted, but no longer "
+                              "exists on disk — those grants aren't doing anything.\n"
+                              "Restore the folder, or remove it from the list.")
 
         self.t_r = ToggleCircle(parent, "C", CC_R,
                                  state=entry.get("cc_allow", False),
@@ -970,7 +978,7 @@ class ClausyApp:
             rtl = claude_meta.check_rtl_first_line(path)
             if rtl and not rtl["ok"]:
                 warn = ctk.CTkLabel(
-                    head_f, text="⚠ RTL", fg_color="transparent", text_color="#e0a030",
+                    head_f, text="⚠ RTL", fg_color="transparent", text_color=WARN,
                     font=("Segoe UI", 9, "bold"))
                 warn.pack(side="left", padx=(8, 0))
                 Tooltip(warn, "This file has Hebrew text, but the first line isn't "
@@ -979,7 +987,7 @@ class ClausyApp:
 
             stats = claude_meta.claude_md_stats(path)
             if stats:
-                count_color = "#e0a030" if stats["too_long"] else OFF_TXT
+                count_color = WARN if stats["too_long"] else OFF_TXT
                 count_lbl = ctk.CTkLabel(
                     head_f, text=f"{stats['words']} words", fg_color="transparent",
                     text_color=count_color, font=("Segoe UI", 9))
