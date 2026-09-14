@@ -334,6 +334,7 @@ class ClausyApp:
         self._legend_collapsed = False
         self._cc_fingerprint = None
         self._cd_fingerprint = None
+        self._baseline_entries: list[dict] = []
 
         self._cc_var   = tk.StringVar()
         self._cd_var   = tk.StringVar()
@@ -901,6 +902,7 @@ class ClausyApp:
         self._undo_btn.configure(state="disabled", text_color=OFF_TXT)
         self._pending = False
         self._capture_fingerprints()
+        self._baseline_entries = _snap(self._entries)
         self._apply_sort(refresh=True)
 
     def _capture_fingerprints(self):
@@ -1171,6 +1173,33 @@ class ClausyApp:
             "in-memory version.\n\nOverwrite anyway? (Choose No, then use "
             "Save & Reload first to pick up the external changes instead.)")
 
+    def _confirm_changes_summary(self, summary: dict) -> bool:
+        lines = []
+
+        def _section(title, paths):
+            lines.append(f"{title} ({len(paths)}):")
+            lines.extend(f"    {p}" for p in paths[:10])
+            if len(paths) > 10:
+                lines.append(f"    …and {len(paths) - 10} more")
+
+        if summary["added"]:
+            _section("+ New directories", summary["added"])
+        if summary["removed"]:
+            _section("− Removed directories", summary["removed"])
+        if summary["changed"]:
+            lines.append(f"~ Permission changes ({len(summary['changed'])}):")
+            for path, diffs in list(summary["changed"].items())[:10]:
+                parts = [f"{COLUMN_NAMES.get(k, k)} → {'ON' if new else 'off'}"
+                         for k, (old, new) in diffs.items()]
+                lines.append(f"    {path}: " + ", ".join(parts))
+            if len(summary["changed"]) > 10:
+                lines.append(f"    …and {len(summary['changed']) - 10} more")
+
+        return messagebox.askyesno(
+            "ClAuSy — Review Changes",
+            "About to write these changes to the config file(s):\n\n" +
+            "\n".join(lines) + "\n\nProceed?")
+
     def _execute_changes(self):
         for r in self._rows:
             r.sync()
@@ -1182,6 +1211,11 @@ class ClausyApp:
                                  "No config paths set.\nGo to Settings tab first.")
             return
         if not self._check_external_changes():
+            return
+
+        summary = config_manager.summarize_changes(self._baseline_entries, self._entries)
+        if (summary["added"] or summary["removed"] or summary["changed"]) \
+                and not self._confirm_changes_summary(summary):
             return
 
         # Snapshot the entries before handing them to the background thread —

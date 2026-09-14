@@ -199,6 +199,28 @@ def find_allow_deny_conflicts(cc_settings: str) -> set:
     return (allow_paths | add_paths) & deny_paths
 
 
+def summarize_changes(old_entries: list, new_entries: list) -> dict:
+    """Compares two entry snapshots ({"path","cc_allow","cc_additional","cd"})
+    and returns {"added": [path,...], "removed": [path,...],
+    "changed": {path: {key: (old_bool, new_bool)}}} — added/removed
+    directories and per-directory permission flips."""
+    old_by_path = {e["path"]: e for e in old_entries if e.get("path")}
+    new_by_path = {e["path"]: e for e in new_entries if e.get("path")}
+    added = sorted(set(new_by_path) - set(old_by_path))
+    removed = sorted(set(old_by_path) - set(new_by_path))
+    changed = {}
+    for path in sorted(set(old_by_path) & set(new_by_path)):
+        o, n = old_by_path[path], new_by_path[path]
+        diffs = {}
+        for key in ("cc_allow", "cc_additional", "cd"):
+            old_val, new_val = bool(o.get(key)), bool(n.get(key))
+            if old_val != new_val:
+                diffs[key] = (old_val, new_val)
+        if diffs:
+            changed[path] = diffs
+    return {"added": added, "removed": removed, "changed": changed}
+
+
 def find_overlapping_paths(paths: list) -> set:
     """Returns the subset of `paths` that is an ancestor (or descendant) of
     another path in the same list — e.g. tracking both C:\\proj and

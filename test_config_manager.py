@@ -563,6 +563,45 @@ class TestFindAllowDenyConflicts(unittest.TestCase):
         self.assertEqual(config_manager.find_allow_deny_conflicts(self.path), set())
 
 
+class TestSummarizeChanges(unittest.TestCase):
+    def test_no_changes(self):
+        entries = [{"path": r"C:\a", "cc_allow": True}]
+        result = config_manager.summarize_changes(entries, entries)
+        self.assertEqual(result, {"added": [], "removed": [], "changed": {}})
+
+    def test_added_directory(self):
+        old = [{"path": r"C:\a"}]
+        new = [{"path": r"C:\a"}, {"path": r"C:\b"}]
+        result = config_manager.summarize_changes(old, new)
+        self.assertEqual(result["added"], [r"C:\b"])
+        self.assertEqual(result["removed"], [])
+
+    def test_removed_directory(self):
+        old = [{"path": r"C:\a"}, {"path": r"C:\b"}]
+        new = [{"path": r"C:\a"}]
+        result = config_manager.summarize_changes(old, new)
+        self.assertEqual(result["removed"], [r"C:\b"])
+
+    def test_permission_flip_detected(self):
+        old = [{"path": r"C:\a", "cc_allow": False, "cc_additional": False, "cd": False}]
+        new = [{"path": r"C:\a", "cc_allow": True, "cc_additional": False, "cd": False}]
+        result = config_manager.summarize_changes(old, new)
+        self.assertEqual(result["changed"], {r"C:\a": {"cc_allow": (False, True)}})
+
+    def test_multiple_flips_on_same_path(self):
+        old = [{"path": r"C:\a", "cc_allow": False, "cc_additional": True, "cd": False}]
+        new = [{"path": r"C:\a", "cc_allow": True, "cc_additional": False, "cd": False}]
+        result = config_manager.summarize_changes(old, new)
+        self.assertEqual(result["changed"][r"C:\a"],
+                         {"cc_allow": (False, True), "cc_additional": (True, False)})
+
+    def test_unset_keys_default_to_false(self):
+        old = [{"path": r"C:\a"}]
+        new = [{"path": r"C:\a", "cc_allow": True}]
+        result = config_manager.summarize_changes(old, new)
+        self.assertEqual(result["changed"], {r"C:\a": {"cc_allow": (False, True)}})
+
+
 class TestFindOverlappingPaths(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
