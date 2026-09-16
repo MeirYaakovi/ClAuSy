@@ -662,5 +662,42 @@ class TestFindUnknownKeys(unittest.TestCase):
         self.assertEqual(config_manager.find_unknown_keys(p), [])
 
 
+class TestFindGitignoredSecrets(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def _gitignore(self, lines):
+        with open(os.path.join(self.tmp, ".gitignore"), "w", encoding="utf-8") as f:
+            f.write("\n".join(lines))
+
+    def test_no_gitignore_returns_empty(self):
+        self.assertEqual(config_manager.find_gitignored_secrets(self.tmp), [])
+
+    def test_finds_ignored_env_file(self):
+        self._gitignore([".env"])
+        with open(os.path.join(self.tmp, ".env"), "w") as f:
+            f.write("SECRET=1")
+        result = config_manager.find_gitignored_secrets(self.tmp)
+        self.assertEqual(len(result), 1)
+        self.assertTrue(result[0].endswith(".env"))
+
+    def test_secret_file_not_ignored_is_skipped(self):
+        self._gitignore(["node_modules/"])
+        with open(os.path.join(self.tmp, ".env"), "w") as f:
+            f.write("SECRET=1")
+        self.assertEqual(config_manager.find_gitignored_secrets(self.tmp), [])
+
+    def test_finds_pem_via_glob_pattern(self):
+        self._gitignore(["*.pem"])
+        with open(os.path.join(self.tmp, "server.pem"), "w") as f:
+            f.write("---KEY---")
+        result = config_manager.find_gitignored_secrets(self.tmp)
+        self.assertEqual(len(result), 1)
+
+    def test_missing_directory_returns_empty(self):
+        self.assertEqual(
+            config_manager.find_gitignored_secrets(os.path.join(self.tmp, "nope")), [])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

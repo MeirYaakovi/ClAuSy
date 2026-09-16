@@ -482,6 +482,8 @@ class ClausyApp:
             accent=True                                       ).pack(side="left", padx=(0, 10))
         btn(btn_f, "✔ Check",       self._validate_paths      ).pack(side="left", padx=(0, 10))
         btn(btn_f, "🔒 Deny Secrets", self._deny_secrets_preset).pack(side="left", padx=(0, 10))
+        btn(btn_f, "🔍 Find Ignored Secrets",
+            self._scan_gitignored_secrets                     ).pack(side="left", padx=(0, 10))
         btn(btn_f, "🐞 Report Confusing Config",
             lambda: webbrowser.open(REPORT_ISSUE_URL)          ).pack(side="left")
 
@@ -867,6 +869,24 @@ class ClausyApp:
             self._set_status(f"Added {added} deny rule(s) for secret files.", CC_G)
         else:
             self._set_status("All secret-file deny rules were already present.", DIM)
+
+    def _scan_gitignored_secrets(self):
+        found = []
+        for d in self._project_dirs():
+            found.extend(config_manager.find_gitignored_secrets(d))
+        if not found:
+            messagebox.showinfo(
+                "ClAuSy", "No gitignored secret-looking files found under tracked "
+                          "directories.")
+            return
+        preview = "\n".join(f"  • {p}" for p in found[:20])
+        more = f"\n  …and {len(found) - 20} more" if len(found) > 20 else ""
+        messagebox.showwarning(
+            "ClAuSy — Gitignored secrets found",
+            f"Found {len(found)} file(s) matching common secret patterns that are "
+            f"excluded from git via .gitignore — deliberately kept out of version "
+            f"control, but still readable by Claude if the containing directory is "
+            f"granted access:\n\n{preview}{more}")
 
     def _restore_backup(self, cfg_type: str, var: tk.StringVar):
         path = var.get().strip()

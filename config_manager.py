@@ -1,4 +1,5 @@
 """Read/write Claude Code and Claude Desktop config files safely."""
+import fnmatch
 import json
 import os
 from datetime import datetime
@@ -154,6 +155,49 @@ def add_deny_patterns(cc_settings: str, patterns: list) -> int:
         data["permissions"]["deny"] = existing + new
         _save(cc_settings, data)
     return len(new)
+
+
+SECRET_FILE_GLOBS = [
+    ".env", ".env.*", "*.pem", "*.key", "id_rsa", "id_ed25519", "credentials.json",
+]
+
+
+def _gitignore_line_covers(line: str, rel_path: str) -> bool:
+    line = line.strip().rstrip("/")
+    if not line or line.startswith("#") or line.startswith("!"):
+        return False
+    name = rel_path.rsplit("/", 1)[-1]
+    return fnmatch.fnmatch(rel_path, line) or fnmatch.fnmatch(name, line) or line in (rel_path, name)
+
+
+def find_gitignored_secrets(directory: str) -> list:
+    """For a tracked directory, finds files matching common secret patterns
+    (the same ones the 'Deny Secrets' preset protects against) that exist on
+    disk AND are excluded from git via .gitignore — meaning the file was
+    deliberately kept out of version control, but Claude could still read it
+    if the directory is granted access."""
+    d = Path(directory)
+    gitignore = d / ".gitignore"
+    if not d.is_dir() or not gitignore.is_file():
+        return []
+    try:
+        lines = gitignore.read_text(encoding="utf-8", errors="ignore").splitlines()
+    except OSError:
+        return []
+
+    found = []
+    for pattern in SECRET_FILE_GLOBS:
+        try:
+            matches = d.rglob(pattern)
+        except OSError:
+            continue
+        for match in matches:
+            if not match.is_file():
+                continue
+            rel = match.relative_to(d).as_posix()
+            if any(_gitignore_line_covers(line, rel) for line in lines):
+                found.append(str(match))
+    return sorted(set(found))
 
 
 def file_fingerprint(path: str) -> tuple | None:
