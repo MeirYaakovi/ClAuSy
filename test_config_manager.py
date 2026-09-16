@@ -526,6 +526,47 @@ class TestGetPermissionMode(unittest.TestCase):
         self.assertIsNone(config_manager.get_permission_mode(p))
 
 
+class TestIsZeroDenyBypassCombo(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def _write(self, data):
+        p = os.path.join(self.tmp, "settings.json")
+        with open(p, "w", encoding="utf-8") as f:
+            json.dump(data, f)
+        return p
+
+    def test_blank_path_is_false(self):
+        self.assertFalse(config_manager.is_zero_deny_bypass_combo(""))
+
+    def test_bypass_with_no_deny_key_is_true(self):
+        p = self._write({"permissions": {"defaultMode": "bypassPermissions"}})
+        self.assertTrue(config_manager.is_zero_deny_bypass_combo(p))
+
+    def test_bypass_with_empty_deny_list_is_true(self):
+        p = self._write({"permissions": {"defaultMode": "bypassPermissions", "deny": []}})
+        self.assertTrue(config_manager.is_zero_deny_bypass_combo(p))
+
+    def test_bypass_with_nonempty_deny_is_false(self):
+        p = self._write({"permissions": {"defaultMode": "bypassPermissions",
+                                          "deny": ["Read(**/.env)"]}})
+        self.assertFalse(config_manager.is_zero_deny_bypass_combo(p))
+
+    def test_non_bypass_mode_is_false(self):
+        p = self._write({"permissions": {"defaultMode": "acceptEdits"}})
+        self.assertFalse(config_manager.is_zero_deny_bypass_combo(p))
+
+    def test_missing_file_is_false(self):
+        self.assertFalse(config_manager.is_zero_deny_bypass_combo(
+            os.path.join(self.tmp, "missing.json")))
+
+    def test_corrupt_file_is_false(self):
+        p = os.path.join(self.tmp, "bad.json")
+        with open(p, "w") as f:
+            f.write("{broken")
+        self.assertFalse(config_manager.is_zero_deny_bypass_combo(p))
+
+
 class TestFindAllowDenyConflicts(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()

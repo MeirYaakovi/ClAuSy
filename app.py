@@ -531,8 +531,15 @@ class ClausyApp:
         self._tracked_local_banner.grid(row=10, column=0, sticky="ew", pady=(10, 0))
         self._tracked_local_banner.grid_remove()
 
+        self._zero_deny_banner = ctk.CTkLabel(
+            wrap, text="", fg_color="#3a2a1a", text_color=WARN, corner_radius=6,
+            font=("Segoe UI", 10, "bold"), anchor="w", justify="left", wraplength=760,
+            padx=12, pady=10)
+        self._zero_deny_banner.grid(row=11, column=0, sticky="ew", pady=(10, 0))
+        self._zero_deny_banner.grid_remove()
+
         sim_f = ctk.CTkFrame(wrap, fg_color=SURF2, corner_radius=8)
-        sim_f.grid(row=11, column=0, sticky="ew", pady=(14, 0))
+        sim_f.grid(row=12, column=0, sticky="ew", pady=(14, 0))
         sim_inner = ctk.CTkFrame(sim_f, fg_color="transparent")
         sim_inner.pack(fill="x", padx=12, pady=10)
         ctk.CTkLabel(
@@ -666,6 +673,18 @@ class ClausyApp:
             self._tracked_local_banner.grid()
         else:
             self._tracked_local_banner.grid_remove()
+
+    def _check_zero_deny_bypass_combo(self):
+        cc = self._cc_var.get().strip()
+        if cc and config_manager.is_zero_deny_bypass_combo(cc):
+            self._zero_deny_banner.configure(
+                text="⚠ bypassPermissions (YOLO mode) is on AND the deny list is empty "
+                     "— there's no permission block at all right now, not even one that "
+                     "would normally still stop reads/writes to specific denied paths. "
+                     "Consider adding at least the 'Deny Secrets' preset above.")
+            self._zero_deny_banner.grid()
+        else:
+            self._zero_deny_banner.grid_remove()
 
     # ── Directories tab ───────────────────────────────────────────────────────
 
@@ -1061,6 +1080,7 @@ class ClausyApp:
         self._check_unknown_settings_keys()
         self._check_unsafe_bash_wildcards()
         self._check_tracked_settings_local()
+        self._check_zero_deny_bypass_combo()
         self._refresh_cd_candidates()
 
     # ── entry management ─────────────────────────────────────────────────────

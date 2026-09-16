@@ -290,6 +290,23 @@ def get_permission_mode(cc_settings: str) -> str | None:
     return data.get("permissions", {}).get("defaultMode")
 
 
+def is_zero_deny_bypass_combo(cc_settings: str) -> bool:
+    """True if permissions.defaultMode is bypassPermissions AND
+    permissions.deny is empty/absent. bypassPermissions already skips every
+    approval prompt, but a non-empty deny list at least still blocks the
+    specific paths/commands listed there — an empty deny list on top of
+    bypass mode means nothing at all is off-limits, a materially riskier
+    combination than bypass mode alone."""
+    if not cc_settings:
+        return False
+    try:
+        data = _load(cc_settings)
+    except ConfigError:
+        return False
+    perms = data.get("permissions", {})
+    return perms.get("defaultMode") == "bypassPermissions" and not perms.get("deny")
+
+
 def get_permission_rules(cc_settings: str) -> tuple:
     """Returns (allow, deny) rule-string lists from permissions in
     cc_settings.json, or ([], []) if unreadable."""
