@@ -6,6 +6,7 @@ import time
 import urllib.parse
 import webbrowser
 import tkinter as tk
+from datetime import datetime
 from tkinter import filedialog, messagebox
 from pathlib import Path
 
@@ -537,14 +538,31 @@ class ClausyApp:
 
     def _check_permission_mode(self):
         mode = config_manager.get_permission_mode(self._cc_var.get())
-        if mode == "bypassPermissions":
+        is_yolo = mode == "bypassPermissions"
+        cc_path = self._cc_var.get().strip()
+        since_text = ""
+        if cc_path:
+            data = storage.load()
+            yolo_since = storage.note_yolo_state(
+                data.get("yolo_since", {}), cc_path, is_yolo, datetime.now().isoformat())
+            data["yolo_since"] = yolo_since
+            storage.save(data)
+            since = yolo_since.get(cc_path)
+            if is_yolo and since:
+                try:
+                    days = (datetime.now() - datetime.fromisoformat(since)).days
+                    since_text = (f" It's been enabled for {days} day"
+                                  f"{'s' if days != 1 else ''} (since {since[:10]}).")
+                except ValueError:
+                    pass
+        if is_yolo:
             self._yolo_banner.configure(
                 text="⚠ Claude Code's default permission mode is 'bypassPermissions' "
                      "(YOLO mode) — every action is auto-approved with no prompts at "
                      "all. This mode has caused real data loss (e.g. an unconfirmed "
                      "rm -rf wiping a user's home directory). Consider switching to "
                      "'default' or 'acceptEdits' in settings.json unless you fully "
-                     "trust every command Claude Code might run here.")
+                     "trust every command Claude Code might run here." + since_text)
             self._yolo_banner.grid()
         else:
             self._yolo_banner.grid_remove()
