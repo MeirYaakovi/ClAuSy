@@ -177,6 +177,37 @@ class TestFindDangerousHookCommands(unittest.TestCase):
         hooks = [{"path": "s.json", "event": "Stop", "commands": []}]
         self.assertEqual(claude_meta.find_dangerous_hook_commands(hooks), [])
 
+    def test_flags_rm_rf(self):
+        hooks = [{"path": "s.json", "event": "PreToolUse", "commands": ["rm -rf /tmp/x"]}]
+        flagged = claude_meta.find_dangerous_hook_commands(hooks)
+        self.assertEqual(len(flagged), 1)
+        self.assertIn("force-delete", flagged[0]["reason"])
+
+    def test_flags_rm_fr_order(self):
+        hooks = [{"path": "s.json", "event": "PreToolUse", "commands": ["rm -fr build/"]}]
+        self.assertEqual(len(claude_meta.find_dangerous_hook_commands(hooks)), 1)
+
+    def test_rm_without_force_flag_not_flagged(self):
+        hooks = [{"path": "s.json", "event": "PreToolUse", "commands": ["rm build/output.txt"]}]
+        self.assertEqual(claude_meta.find_dangerous_hook_commands(hooks), [])
+
+    def test_flags_git_force_push(self):
+        cmd = "git push --force origin main"
+        hooks = [{"path": "s.json", "event": "Stop", "commands": [cmd]}]
+        flagged = claude_meta.find_dangerous_hook_commands(hooks)
+        self.assertEqual(len(flagged), 1)
+        self.assertIn("force-push", flagged[0]["reason"])
+
+    def test_flags_git_force_push_short_flag(self):
+        cmd = "git push -f origin main"
+        hooks = [{"path": "s.json", "event": "Stop", "commands": [cmd]}]
+        self.assertEqual(len(claude_meta.find_dangerous_hook_commands(hooks)), 1)
+
+    def test_normal_git_push_not_flagged(self):
+        cmd = "git push origin main"
+        hooks = [{"path": "s.json", "event": "Stop", "commands": [cmd]}]
+        self.assertEqual(claude_meta.find_dangerous_hook_commands(hooks), [])
+
 
 class TestFindHookLoopRisks(unittest.TestCase):
     def test_flags_stop_hook_invoking_claude(self):

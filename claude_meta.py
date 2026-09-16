@@ -241,6 +241,13 @@ DANGEROUS_HOOK_PATTERNS = [
     (re.compile(r"base64\s+(-d|--decode)\b"), "decodes a base64 payload before executing it"),
     (re.compile(r"powershell(\.exe)?\s+.*-enc", re.IGNORECASE), "runs an encoded PowerShell command"),
     (re.compile(r"\biex\b", re.IGNORECASE), "uses PowerShell Invoke-Expression on dynamic input"),
+    (re.compile(r"\brm\s+(-[a-z]*r[a-z]*f[a-z]*\b|-[a-z]*f[a-z]*r[a-z]*\b|"
+                r"--recursive\s+--force\b|--force\s+--recursive\b)", re.IGNORECASE),
+     "runs a recursive force-delete (rm -rf)"),
+    (re.compile(r"\brd\s+/s\s+/q\b", re.IGNORECASE), "runs a recursive force-delete (rd /s /q)"),
+    (re.compile(r"remove-item\b.*-recurse\b.*-force\b|remove-item\b.*-force\b.*-recurse\b",
+                re.IGNORECASE), "runs a recursive force-delete (Remove-Item -Recurse -Force)"),
+    (re.compile(r"\bgit\s+push\s+(--force\b|-f\b)"), "force-pushes, which can overwrite remote history"),
 ]
 
 
