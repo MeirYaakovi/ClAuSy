@@ -284,3 +284,38 @@ def find_hook_loop_risks(hooks: list) -> list:
             if _CLAUDE_INVOCATION_RE.search(cmd):
                 flagged.append({"path": h["path"], "event": h["event"], "command": cmd})
     return flagged
+
+
+_EXPLICIT_INTERPRETER_RE = re.compile(
+    r"^\s*(wsl\b|bash\b|sh\b|/bin/(ba)?sh\b|pwsh\b|powershell(\.exe)?\b)", re.IGNORECASE)
+
+WINDOWS_INCOMPATIBLE_PATTERNS = [
+    (re.compile(r"^\s*#!"), "starts with a shebang line, which cmd.exe doesn't interpret"),
+    (re.compile(r"\$\([^)]*\)"), "uses POSIX $(...) command substitution, unsupported in cmd.exe"),
+    (re.compile(r"\$[A-Za-z_][A-Za-z0-9_]*"), "uses POSIX $VAR-style env var expansion instead of %VAR%"),
+    (re.compile(r"^\s*'.*'\s*$"), "wraps the whole command in single quotes, which cmd.exe treats literally"),
+    (re.compile(r"(^|[\s;&|])/(usr|bin|etc|tmp)/"), "uses a Unix-style absolute path (/usr, /bin, /etc, /tmp)"),
+]
+
+
+def find_windows_incompatible_hooks(hooks: list) -> list:
+    """Flags hook commands using Unix-only shell syntax that silently fails
+    (commonly exit 126, no output) when Claude Code spawns it through
+    cmd.exe on native Windows instead of a POSIX shell. Only meaningful
+    when ClAuSy itself is running on Windows — on macOS/Linux this syntax
+    is normal. Commands that explicitly invoke wsl/bash/sh/powershell are
+    skipped, since those pick their own interpreter regardless of the
+    default shell. Returns [{"path","event","command","reason"}]."""
+    if os.name != "nt":
+        return []
+    flagged = []
+    for h in hooks:
+        for cmd in h.get("commands", []):
+            if _EXPLICIT_INTERPRETER_RE.match(cmd):
+                continue
+            for pattern, reason in WINDOWS_INCOMPATIBLE_PATTERNS:
+                if pattern.search(cmd):
+                    flagged.append({"path": h["path"], "event": h["event"],
+                                     "command": cmd, "reason": reason})
+                    break
+    return flagged

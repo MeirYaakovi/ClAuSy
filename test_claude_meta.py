@@ -3,6 +3,7 @@ import json
 import os
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
 import claude_meta
@@ -299,6 +300,57 @@ class TestClaudeMdStats(unittest.TestCase):
         result = claude_meta.claude_md_stats(str(self.path))
         self.assertEqual(result["words"], 0)
         self.assertFalse(result["too_long"])
+
+
+class TestFindWindowsIncompatibleHooks(unittest.TestCase):
+    def test_flags_dollar_paren_substitution_on_windows(self):
+        hooks = [{"path": "s.json", "event": "PreToolUse", "commands": ["echo $(date)"]}]
+        with unittest.mock.patch.object(claude_meta.os, "name", "nt"):
+            flagged = claude_meta.find_windows_incompatible_hooks(hooks)
+        self.assertEqual(len(flagged), 1)
+        self.assertIn("command substitution", flagged[0]["reason"])
+
+    def test_flags_dollar_var_expansion_on_windows(self):
+        hooks = [{"path": "s.json", "event": "Stop", "commands": ["echo $HOME/notes"]}]
+        with unittest.mock.patch.object(claude_meta.os, "name", "nt"):
+            flagged = claude_meta.find_windows_incompatible_hooks(hooks)
+        self.assertEqual(len(flagged), 1)
+
+    def test_flags_shebang_on_windows(self):
+        hooks = [{"path": "s.json", "event": "SessionStart", "commands": ["#!/bin/sh\necho hi"]}]
+        with unittest.mock.patch.object(claude_meta.os, "name", "nt"):
+            flagged = claude_meta.find_windows_incompatible_hooks(hooks)
+        self.assertEqual(len(flagged), 1)
+
+    def test_flags_unix_absolute_path_on_windows(self):
+        hooks = [{"path": "s.json", "event": "PreToolUse", "commands": ["/usr/bin/env node script.js"]}]
+        with unittest.mock.patch.object(claude_meta.os, "name", "nt"):
+            flagged = claude_meta.find_windows_incompatible_hooks(hooks)
+        self.assertEqual(len(flagged), 1)
+
+    def test_explicit_bash_invocation_skipped(self):
+        hooks = [{"path": "s.json", "event": "Stop", "commands": ["bash -c 'echo $(date)'"]}]
+        with unittest.mock.patch.object(claude_meta.os, "name", "nt"):
+            flagged = claude_meta.find_windows_incompatible_hooks(hooks)
+        self.assertEqual(flagged, [])
+
+    def test_explicit_powershell_invocation_skipped(self):
+        hooks = [{"path": "s.json", "event": "Stop", "commands": ["powershell -Command \"$x = 1\""]}]
+        with unittest.mock.patch.object(claude_meta.os, "name", "nt"):
+            flagged = claude_meta.find_windows_incompatible_hooks(hooks)
+        self.assertEqual(flagged, [])
+
+    def test_plain_windows_command_not_flagged(self):
+        hooks = [{"path": "s.json", "event": "PreToolUse", "commands": ["npm test"]}]
+        with unittest.mock.patch.object(claude_meta.os, "name", "nt"):
+            flagged = claude_meta.find_windows_incompatible_hooks(hooks)
+        self.assertEqual(flagged, [])
+
+    def test_not_flagged_on_non_windows(self):
+        hooks = [{"path": "s.json", "event": "PreToolUse", "commands": ["echo $(date)"]}]
+        with unittest.mock.patch.object(claude_meta.os, "name", "posix"):
+            flagged = claude_meta.find_windows_incompatible_hooks(hooks)
+        self.assertEqual(flagged, [])
 
 
 if __name__ == "__main__":
