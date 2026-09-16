@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased] - 2026-09-16
 
 ### Added
+- Warn when a hook command uses Unix-only shell syntax (`$(...)`, `$VAR`, shebangs, `/usr`/`/bin` paths) that silently fails on native Windows via cmd.exe
+- Warn when `bypassPermissions` (YOLO mode) is combined with an empty deny list — nothing at all is off-limits
+- Flag hook commands likely to hang instead of returning (interactive read prompts, long-running dev servers, `tail -f`, `docker compose up` without `-d`), which freezes the whole session
+- Flag project subagents whose description never mentions CLAUDE.md/project conventions, in a project with a non-trivial CLAUDE.md — subagents don't automatically inherit it
+- Scan MCP server `env` blocks for hardcoded secrets instead of `${VAR}`-style references
+- CLAUDE.md Map tab: index `.claude/rules/*.md` files, a separate instruction source Claude Code also loads
+- Detect when a global `bypassPermissions` mode is silently overridden by a project's own `.claude/settings.json` permissions block (Claude Code's precedence is project-over-user)
+- Git Push tab: surface hooks that changed in `.claude/settings.json` since the last-seen HEAD for a repo, with an added/removed diff in the tooltip
+- "Copy Diagnostics" button — redacted summary (permission mode, config presence, hook counts, MCP server names) for pasting into a GitHub issue
+- "Test statusLine" button — runs the configured statusLine command and shows its actual output/exit code
 - Git Push tab: scans tracked directories for git repos with unpushed commits, shows branch/upstream/dirty status, and pushes one or many repos at once (with a confirmation dialog)
 - Git Push tab: flag repos with unpushed commits sitting directly on main/master instead of a feature branch
 - Git Push tab: warn when a repo has diverged from its remote (push would likely be rejected as non-fast-forward) — ClAuSy never force-pushes

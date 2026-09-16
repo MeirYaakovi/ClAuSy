@@ -42,6 +42,7 @@
     - badge "⇕ N behind" + אזהרה בדיאלוג ה-push אם הריפו התפצל מה-remote (push רגיל צפוי להידחות; ClAuSy לעולם לא עושה force-push)
     - badge "🌿 new branch" אם ה-branch הנוכחי לא נראה בסריקה קודמת (נשמר ב-storage.py)
     - badge "⚠ history rewritten" + אזהרה בדיאלוג ה-push אם ה-HEAD הקודם שנשמר כבר לא ancestor של ה-HEAD הנוכחי (amend/rebase)
+    - badge "⚠ hooks changed since last pull" + tooltip עם added/removed — משווה hooks ב-.claude/settings.json בין ה-HEAD הקודם הידוע לנוכחי (הגנה מפני hook injection דרך commit שנמשך, כמו CVE-2025-59536)
     - תצוגת הקומיטים הלא-דחופים האחרונים (hash + הודעה), tooltip לרשימה המלאה
     - checkbox לכל ריפו + "☑ Select Unpushed" / "☐ Select None" + כפתור "⬆ Push Selected" (עם דיאלוג אישור לפני push בפועל, כי זו פעולה שמשפיעה על remote)
     - כפתור "Push" בודד לכל שורה, וכפתור "Open" לפתיחת התיקייה
@@ -55,15 +56,22 @@
   - דיאלוג "השתנה חיצונית" משודרג — מזהיר במפורש אם rules (לא תיקיות) נעלמו מ-settings.json
   - באנר אזהרה אם settings.local.json נמצא tracked בgit במקום gitignored (בדיקה ישירה מול `git ls-files`)
   - "Show effective permissions" בתפריט קליק ימני — ממזג global settings.json + project-level .claude/settings.json + Claude Desktop לverdict אחד (ALLOW/DENY/ASK)
+  - באנר "🐞 Copy Diagnostics" — מעתיק סיכום מצונזר (permission mode, נוכחות קבצים, מספר hooks, שמות MCP servers בלבד — בלי טקסט commands/args) ללוח, להדבקה ב-GitHub issue
+  - כפתור "▶ Test statusLine" — מריץ בפועל את פקודת ה-statusLine המוגדרת ומציג output/exit code
 - `claude_meta.py` — סריקה טהורה (ללא side-effects) של CLAUDE.md / subagents / hooks
   - `find_claude_md_files()`, `find_agents()`, `find_hooks()` (כולל `commands` בפועל לכל hook)
   - `check_rtl_first_line()`, `claude_md_stats()`, `find_agent_description_issues()`
   - `find_dangerous_hook_commands()` — תבניות זדוניות/הרסניות ידועות (curl|sh, base64 -d, PowerShell מקודד, rm -rf, git push --force)
   - `find_hook_loop_risks()` — hooks על Stop/SubagentStop/UserPromptSubmit שקוראים ל-`claude` שוב
+  - `find_windows_incompatible_hooks()` — syntax POSIX-בלבד ($(...), $VAR, shebang, נתיבי /usr//bin) שנכשל בשקט תחת cmd.exe
+  - `find_hook_blocking_risks()` — פקודות שעלולות לתקוע את הסשן (read -p אינטראקטיבי, npm start, tail -f, docker compose up בלי -d)
+  - `find_subagent_claude_md_blind_spots()` — subagent פרויקטלי שה-description שלו לא מזכיר CLAUDE.md/conventions, בפרויקט עם CLAUDE.md משמעותי
+  - `find_rules_files()` — אינדוקס קבצי .claude/rules/*.md (מקור הוראות נפרד מ-CLAUDE.md שClaude Code גם טוען)
 - `git_status.py` — סריקת ריפוזיטוריז גיט וסטטוס push (ללא side-effects חוץ מ-`push_repo()`)
   - `find_git_repos()`, `get_repo_status()` (כולל `direct_on_main`, `behind`, `head_sha`), `scan()`, `push_repo()`
   - `is_ancestor()` — לזיהוי amend/rebase מול ה-HEAD הידוע האחרון
   - `is_path_tracked()`, `find_tracked_settings_local()` — settings.local.json שנכנס לgit בטעות
+  - `find_hooks_changed_since()` — משווה hooks ב-.claude/settings.json בין SHA ישן לHEAD הנוכחי (added/removed)
 - `config_manager.py` — קריאה/כתיבה בטוחה לקבצי Claude
   - `ConfigError` — exception ל-JSON פגום
   - `validate_path()` — בדיקת קובץ לפני שימוש
@@ -81,10 +89,15 @@
   - `is_sensitive_system_path()` — זיהוי נתיבי מערכת/credentials רגישים
   - `count_non_path_rules()`, `find_unsafe_bash_wildcards()` — bare `*` בBash allow rules
   - `get_effective_permissions()` — מיזוג global + project-level + Claude Desktop לverdict אחד
+  - `is_zero_deny_bypass_combo()` — bypassPermissions + deny ריק (שילוב מסוכן יותר מbypass לבד)
+  - `find_mcp_exposed_secrets()` — ערכי env של MCP servers שנראים כמו secrets קשיחים במקום `${VAR}`
+  - `find_bypass_precedence_blindspots()` — פרויקט עם permissions block משלו שדורס בשקט global bypassPermissions
+  - `build_diagnostics_summary()` — סיכום diagnostics מצונזר ללוח (עבור "Copy Diagnostics")
+  - `run_statusline_check()` — מריץ בפועל את פקודת ה-statusLine ומחזיר output/exit code (עבור "Test statusLine")
 - `storage.py` — שמירת העדפות UI ב-`~/.clauSy/settings.json` (כולל גודל/מצב חלון, מצב legend, branches ידועים לכל ריפו, HEAD sha אחרון לכל ריפו, מתי הופעל YOLO mode)
 
 ### בדיקות
-- `test_config_manager.py` + `test_claude_meta.py` + `test_git_status.py` + `test_storage.py` — 189 unit tests, כולם עוברים (`python -m pytest`)
+- `test_config_manager.py` + `test_claude_meta.py` + `test_git_status.py` + `test_storage.py` — 250 unit tests, כולם עוברים (`python -m pytest`)
 
 ### GitHub
 - ריפו: https://github.com/MeirYaakovi/ClAuSy
@@ -118,11 +131,12 @@
 - [ ] Thumbnail view — הוספת toggles אינטראקטיביים (כרגע קליק עובד רק בlist)
 
 ### רשימת רעיונות לפיצ'רים
-- `ClAuSy_Feature_Ideas.xlsx` — 160 רעיונות מסודרים לפי קטגוריה/עדיפות, עם עמודות "Do it?"/"Status"/"Date Added" למעקב
+- `ClAuSy_Feature_Ideas.xlsx` — 190 רעיונות מסודרים לפי קטגוריה/עדיפות, עם עמודות "Do it?"/"Status"/"Date Added" למעקב
   - #1-100: רעיונות מקוריים
   - #101-130: 30 רעיונות מבוססי מחקר ברשת (GitHub issues אמיתיים, תקרית YOLO-mode מתועדת, docs רשמיים)
   - #131-160: 30 רעיונות סבב 3 (GitHub issues אמיתיים על permission precedence, wildcard matching, hook loops, ChainDrop npm worm, force-push incidents, plugin marketplaces)
-- 42 רעיונות שסומנו Done: #5, #6, #8, #10, #14, #17, #18, #19, #30, #51, #53, #79, #99, #101, #102, #103, #104, #105, #106, #107, #109, #111, #113, #116, #119, #122, #123, #130, #131, #132, #134, #135, #137, #143, #144, #147, #148, #149, #153, #157, #159, #160
+  - #161-190: 30 רעיונות סבב 5 (GitHub issues אמיתיים על MCP/.claude.json confusion, skills loading, hooks supply-chain — CVE-2025-59536, statusLine platform bugs, context-token overhead, multi-machine sync)
+- 52 רעיונות שסומנו Done: #5, #6, #8, #10, #14, #17, #18, #19, #30, #51, #53, #79, #99, #101, #102, #103, #104, #105, #106, #107, #109, #111, #113, #116, #119, #122, #123, #130, #131, #132, #134, #135, #137, #143, #144, #147, #148, #149, #153, #157, #159, #160, #161, #171, #173, #175, #177, #178, #179, #180, #185, #187
   - #17, #30, #104 התגלו כבר-implemented מסבבים קודמים ולא סומנו — תוקן בסבב 4
 - `CHANGELOG.md` — מתעד את כל הפיצ'רים לפי גרסה (Keep a Changelog format)
 
