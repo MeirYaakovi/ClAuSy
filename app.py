@@ -1661,6 +1661,10 @@ class ClausyApp:
                 self._git_badge(badges, "✔ pushed", CC_G)
             if repo["dirty_count"] > 0:
                 self._git_badge(badges, f"● {repo['dirty_count']} uncommitted", WARN)
+            if repo.get("direct_on_main"):
+                self._git_badge(badges, "⚠ direct on main", WARN)
+            if repo.get("behind", 0) > 0:
+                self._git_badge(badges, f"⇕ {repo['behind']} behind — push may be rejected", WARN)
 
         if repo["unpushed_commits"]:
             latest = repo["unpushed_commits"][0]
@@ -1718,12 +1722,20 @@ class ClausyApp:
     def _push_paths(self, paths: list, names: list):
         if self._git_busy:
             return
+        diverged = [n for p, n in zip(paths, names)
+                    for r in self._git_repos if r["path"] == p and r.get("behind", 0) > 0]
+        diverged_warning = ""
+        if diverged:
+            diverged_warning = (
+                "\n\n⚠ " + ", ".join(diverged) + " diverged from the remote — "
+                "git push will likely be rejected as non-fast-forward (ClAuSy never "
+                "force-pushes, so nothing on the remote can be lost by this action).")
         if not messagebox.askyesno(
             "ClAuSy — Push to remote",
             f"This will run 'git push' for {len(paths)} repo(s):\n\n" +
             "\n".join(f"  • {n}" for n in names) +
             "\n\nThis pushes to the remote (GitHub) and is visible to anyone with "
-            "access to it. Continue?"
+            "access to it. Continue?" + diverged_warning
         ):
             return
 

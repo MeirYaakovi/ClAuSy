@@ -60,13 +60,15 @@ def get_repo_status(path: str) -> dict:
     """Returns status for one repo:
     {"path","name","branch","has_upstream","upstream","ahead","behind",
      "dirty_count","remote_url","unpushed_commits":[{"hash","subject","date"}],
-     "error"} — "error" is set (and other fields best-effort) if git isn't
-    reachable at all."""
+     "direct_on_main","error"} — "error" is set (and other fields best-effort)
+    if git isn't reachable at all. "direct_on_main" flags unpushed commits
+    sitting directly on main/master, a common branch-discipline slip."""
     name = Path(path).name
     out = {
         "path": path, "name": name, "branch": "", "has_upstream": False,
         "upstream": "", "ahead": 0, "behind": 0, "dirty_count": 0,
         "remote_url": "", "unpushed_commits": [], "error": None,
+        "direct_on_main": False,
     }
 
     r = _run_git(path, ["branch", "--show-current"])
@@ -99,6 +101,8 @@ def get_repo_status(path: str) -> dict:
                     if len(parts) == 3:
                         out["unpushed_commits"].append(
                             {"hash": parts[0], "subject": parts[1], "date": parts[2]})
+
+    out["direct_on_main"] = out["branch"] in ("main", "master") and out["ahead"] > 0
 
     r = _run_git(path, ["status", "--porcelain"])
     if r is not None and r.returncode == 0:
