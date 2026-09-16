@@ -75,6 +75,13 @@ class TestGetRepoStatus(unittest.TestCase):
         self.assertEqual(status["ahead"], 0)
         self.assertFalse(status["direct_on_main"])
 
+    def test_head_sha_populated(self):
+        repo = os.path.join(self.tmp, "solo2")
+        _init_repo(repo)
+        _commit(repo)
+        status = git_status.get_repo_status(repo)
+        self.assertEqual(len(status["head_sha"]), 40)
+
     def test_behind_detected(self):
         remote = os.path.join(self.tmp, "remote2.git")
         _git(self.tmp, "init", "-q", "--bare", remote)
@@ -94,6 +101,41 @@ class TestGetRepoStatus(unittest.TestCase):
 
         status = git_status.get_repo_status(a)
         self.assertEqual(status["behind"], 1)
+
+
+class TestIsAncestor(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_linear_history_is_ancestor(self):
+        repo = os.path.join(self.tmp, "r")
+        _init_repo(repo)
+        _commit(repo)
+        sha1 = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo,
+                               capture_output=True, text=True).stdout.strip()
+        _commit(repo, filename="b.txt", content="2", message="second")
+        self.assertTrue(git_status.is_ancestor(repo, sha1))
+
+    def test_amended_commit_is_not_ancestor(self):
+        repo = os.path.join(self.tmp, "r2")
+        _init_repo(repo)
+        _commit(repo)
+        sha1 = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo,
+                               capture_output=True, text=True).stdout.strip()
+        with open(os.path.join(repo, "a.txt"), "w") as f:
+            f.write("changed")
+        _git(repo, "add", "a.txt")
+        _git(repo, "commit", "-q", "--amend", "-m", "amended")
+        self.assertFalse(git_status.is_ancestor(repo, sha1))
+
+    def test_unresolvable_sha_returns_none(self):
+        repo = os.path.join(self.tmp, "r3")
+        _init_repo(repo)
+        _commit(repo)
+        self.assertIsNone(git_status.is_ancestor(repo, "0" * 40))
 
 
 class TestFindGitRepos(unittest.TestCase):

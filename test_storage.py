@@ -37,6 +37,26 @@ class TestNoteBranchSeen(unittest.TestCase):
         self.assertIn("/repo/b", known)
 
 
+class TestNoteHeadSeen(unittest.TestCase):
+    def test_first_sighting_returns_none(self):
+        heads = {}
+        previous = storage.note_head_seen(heads, "/repo/a", "sha1")
+        self.assertIsNone(previous)
+        self.assertEqual(heads["/repo/a"], "sha1")
+
+    def test_second_scan_returns_previous_and_updates(self):
+        heads = {"/repo/a": "sha1"}
+        previous = storage.note_head_seen(heads, "/repo/a", "sha2")
+        self.assertEqual(previous, "sha1")
+        self.assertEqual(heads["/repo/a"], "sha2")
+
+    def test_blank_sha_does_not_overwrite(self):
+        heads = {"/repo/a": "sha1"}
+        previous = storage.note_head_seen(heads, "/repo/a", "")
+        self.assertEqual(previous, "sha1")
+        self.assertEqual(heads["/repo/a"], "sha1")
+
+
 class TestNoteYoloState(unittest.TestCase):
     def test_enabling_records_timestamp(self):
         yolo = {}

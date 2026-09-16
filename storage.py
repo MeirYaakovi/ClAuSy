@@ -15,6 +15,7 @@ _DEFAULTS = {
     "legend_collapsed": False,
     "git_known_branches": {},  # {repo_path: [branch_name, ...]} — Git Push tab
     "yolo_since": {},          # {cc_settings_path: iso_timestamp} — YOLO-mode duration
+    "git_last_head": {},       # {repo_path: head_sha} — Git Push tab, rewrite detection
 }
 
 
@@ -48,6 +49,16 @@ def note_branch_seen(known_branches: dict, repo_path: str, branch: str) -> tuple
     branches.add(branch)
     known_branches[repo_path] = sorted(branches)
     return is_new, known_branches
+
+
+def note_head_seen(last_heads: dict, repo_path: str, head_sha: str) -> str | None:
+    """Returns the previously recorded HEAD sha for `repo_path` (None the
+    first time it's seen), then records `head_sha` as the new baseline
+    (mutates `last_heads` in place)."""
+    previous = last_heads.get(repo_path)
+    if head_sha:
+        last_heads[repo_path] = head_sha
+    return previous
 
 
 def note_yolo_state(yolo_since: dict, cc_settings_path: str, is_yolo: bool, now_iso: str) -> dict:

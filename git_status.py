@@ -84,15 +84,16 @@ def get_repo_status(path: str) -> dict:
     """Returns status for one repo:
     {"path","name","branch","has_upstream","upstream","ahead","behind",
      "dirty_count","remote_url","unpushed_commits":[{"hash","subject","date"}],
-     "direct_on_main","error"} — "error" is set (and other fields best-effort)
-    if git isn't reachable at all. "direct_on_main" flags unpushed commits
-    sitting directly on main/master, a common branch-discipline slip."""
+     "direct_on_main","head_sha","error"} — "error" is set (and other fields
+    best-effort) if git isn't reachable at all. "direct_on_main" flags
+    unpushed commits sitting directly on main/master, a common
+    branch-discipline slip."""
     name = Path(path).name
     out = {
         "path": path, "name": name, "branch": "", "has_upstream": False,
         "upstream": "", "ahead": 0, "behind": 0, "dirty_count": 0,
         "remote_url": "", "unpushed_commits": [], "error": None,
-        "direct_on_main": False,
+        "direct_on_main": False, "head_sha": "",
     }
 
     r = _run_git(path, ["branch", "--show-current"])
@@ -100,6 +101,10 @@ def get_repo_status(path: str) -> dict:
         out["error"] = "git not available"
         return out
     out["branch"] = r.stdout.strip()
+
+    r = _run_git(path, ["rev-parse", "HEAD"])
+    if r is not None and r.returncode == 0:
+        out["head_sha"] = r.stdout.strip()
 
     r = _run_git(path, ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"])
     if r is not None and r.returncode == 0 and r.stdout.strip():
@@ -145,6 +150,17 @@ def scan(project_dirs: list) -> list:
     repos = [get_repo_status(p) for p in find_git_repos(project_dirs)]
     repos.sort(key=lambda r: (r["ahead"] == 0, r["name"].lower()))
     return repos
+
+
+def is_ancestor(path: str, ancestor_sha: str, descendant_ref: str = "HEAD") -> bool | None:
+    """True if `ancestor_sha` is an ancestor of (or equal to) `descendant_ref`
+    in `path`'s repo. Returns None if either commit can't be resolved (e.g.
+    the recorded sha was pruned by a gc, or this isn't a git repo) — the
+    caller should treat that as "can't tell", not as a rewrite."""
+    r = _run_git(path, ["merge-base", "--is-ancestor", ancestor_sha, descendant_ref])
+    if r is None or r.returncode not in (0, 1):
+        return None
+    return r.returncode == 0
 
 
 def push_repo(path: str) -> dict:

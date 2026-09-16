@@ -1784,13 +1784,22 @@ class ClausyApp:
     def _on_gitpush_scanned(self, repos: list):
         data = storage.load()
         known = data.get("git_known_branches", {})
+        last_heads = data.get("git_last_head", {})
         for r in repos:
+            r["history_rewritten"] = False
             if r.get("error") or not r.get("branch"):
                 r["new_branch"] = False
                 continue
             is_new, known = storage.note_branch_seen(known, r["path"], r["branch"])
             r["new_branch"] = is_new
+
+            previous_head = storage.note_head_seen(last_heads, r["path"], r.get("head_sha", ""))
+            if previous_head and previous_head != r.get("head_sha") and r.get("head_sha"):
+                ancestor = git_status.is_ancestor(r["path"], previous_head, r["head_sha"])
+                if ancestor is False:
+                    r["history_rewritten"] = True
         data["git_known_branches"] = known
+        data["git_last_head"] = last_heads
         storage.save(data)
 
         self._git_repos = repos
@@ -1866,6 +1875,8 @@ class ClausyApp:
                 self._git_badge(badges, f"⇕ {repo['behind']} behind — push may be rejected", WARN)
             if repo.get("new_branch"):
                 self._git_badge(badges, "🌿 new branch", WARN)
+            if repo.get("history_rewritten"):
+                self._git_badge(badges, "⚠ history rewritten (amend/rebase?)", WARN)
 
         if repo["unpushed_commits"]:
             latest = repo["unpushed_commits"][0]
@@ -1931,12 +1942,22 @@ class ClausyApp:
                 "\n\n⚠ " + ", ".join(diverged) + " diverged from the remote — "
                 "git push will likely be rejected as non-fast-forward (ClAuSy never "
                 "force-pushes, so nothing on the remote can be lost by this action).")
+
+        rewritten = [n for p, n in zip(paths, names)
+                     for r in self._git_repos if r["path"] == p and r.get("history_rewritten")]
+        rewritten_warning = ""
+        if rewritten:
+            rewritten_warning = (
+                "\n\n⚠ " + ", ".join(rewritten) + " has local history that looks amended "
+                "or rebased since ClAuSy last saw it — a plain push will be rejected unless "
+                "the remote already expects this (ClAuSy never force-pushes).")
+
         if not messagebox.askyesno(
             "ClAuSy — Push to remote",
             f"This will run 'git push' for {len(paths)} repo(s):\n\n" +
             "\n".join(f"  • {n}" for n in names) +
             "\n\nThis pushes to the remote (GitHub) and is visible to anyone with "
-            "access to it. Continue?" + diverged_warning
+            "access to it. Continue?" + diverged_warning + rewritten_warning
         ):
             return
 
