@@ -381,6 +381,66 @@ def find_allow_deny_conflicts(cc_settings: str) -> set:
     return (allow_paths | add_paths) & deny_paths
 
 
+def _path_set(rules: list) -> set:
+    return {os.path.normpath(p) for p in rules if os.path.isabs(p)}
+
+
+def get_effective_permissions(directory: str, cc_settings: str, cd_config: str) -> dict:
+    """Merges permission signals for one directory across every layer
+    ClAuSy can see: the global cc_settings.json, that directory's own
+    project-level .claude/settings.json (only meaningful if `directory` is
+    itself a tracked project root — Claude Code doesn't apply a project's
+    settings.json to paths outside it), and claude_desktop_config.json's
+    filesystem MCP server. Returns {"global_allow","global_additional",
+    "global_deny","project_allow","project_deny","cd_allow","verdict"} —
+    verdict is "deny" if any layer denies (deny always wins), else "allow"
+    if any layer allows, else "ask" (Claude Code's default)."""
+    norm_dir = os.path.normpath(directory) if directory else ""
+
+    global_allow = global_additional = global_deny = False
+    if cc_settings:
+        try:
+            data = _load(cc_settings)
+        except ConfigError:
+            data = {}
+        perms = data.get("permissions", {})
+        global_allow = norm_dir in _path_set(perms.get("allow", []))
+        global_additional = norm_dir in _path_set(perms.get("additionalDirectories", []))
+        global_deny = norm_dir in _path_set(perms.get("deny", []))
+
+    project_allow = project_deny = False
+    if directory:
+        project_settings = Path(directory) / ".claude" / "settings.json"
+        if project_settings.is_file():
+            try:
+                pdata = _load(str(project_settings))
+            except ConfigError:
+                pdata = {}
+            pperms = pdata.get("permissions", {})
+            project_allow = (norm_dir in _path_set(pperms.get("allow", [])) or
+                              norm_dir in _path_set(pperms.get("additionalDirectories", [])))
+            project_deny = norm_dir in _path_set(pperms.get("deny", []))
+
+    cd_allow = False
+    if cd_config:
+        try:
+            cdata = _load(cd_config)
+        except ConfigError:
+            cdata = {}
+        args = cdata.get("mcpServers", {}).get("filesystem", {}).get("args", [])
+        cd_allow = norm_dir in _path_set(args)
+
+    any_deny = global_deny or project_deny
+    any_allow = global_allow or global_additional or project_allow or cd_allow
+    verdict = "deny" if any_deny else ("allow" if any_allow else "ask")
+
+    return {
+        "global_allow": global_allow, "global_additional": global_additional,
+        "global_deny": global_deny, "project_allow": project_allow,
+        "project_deny": project_deny, "cd_allow": cd_allow, "verdict": verdict,
+    }
+
+
 def summarize_changes(old_entries: list, new_entries: list) -> dict:
     """Compares two entry snapshots ({"path","cc_allow","cc_additional","cd"})
     and returns {"added": [path,...], "removed": [path,...],

@@ -200,12 +200,14 @@ class DirectoryRow:
 
     def __init__(self, parent, entry: dict, idx: int,
                  on_change=None, on_pre_change=None, is_overlap: bool = False,
-                 on_remove=None, is_denied: bool = False, is_sensitive: bool = False):
-        self.entry         = entry
-        self.on_change     = on_change
-        self.on_pre_change = on_pre_change
-        self.on_remove     = on_remove
-        self._sel          = tk.BooleanVar(value=False)
+                 on_remove=None, is_denied: bool = False, is_sensitive: bool = False,
+                 on_show_permissions=None):
+        self.entry               = entry
+        self.on_change           = on_change
+        self.on_pre_change       = on_pre_change
+        self.on_remove           = on_remove
+        self.on_show_permissions = on_show_permissions
+        self._sel                = tk.BooleanVar(value=False)
 
         self.cb = ctk.CTkCheckBox(parent, text="", variable=self._sel,
                                    onvalue=True, offvalue=False,
@@ -288,9 +290,14 @@ class DirectoryRow:
                        bd=0)
         menu.add_command(label="Open", command=self._open_dir)
         menu.add_command(label="Copy path", command=self._copy_path)
+        menu.add_command(label="Show effective permissions", command=self._show_permissions)
         menu.add_separator()
         menu.add_command(label="Remove", command=self._remove)
         menu.tk_popup(event.x_root, event.y_root)
+
+    def _show_permissions(self):
+        if self.on_show_permissions:
+            self.on_show_permissions(self.entry.get("path", ""))
 
     def _remove(self):
         if self.on_remove:
@@ -959,6 +966,27 @@ class ClausyApp:
         self._sim_result_lbl.configure(
             text=f"Verdict: {verdict.upper()} — {detail}", text_color=color)
 
+    def _show_effective_permissions(self, path: str):
+        if not path:
+            return
+        eff = config_manager.get_effective_permissions(
+            path, self._cc_var.get(), self._cd_var.get())
+        lines = [
+            f"Directory: {path}\n",
+            f"Global settings.json — allow: {'yes' if eff['global_allow'] else 'no'}, "
+            f"additionalDirectories: {'yes' if eff['global_additional'] else 'no'}, "
+            f"deny: {'yes' if eff['global_deny'] else 'no'}",
+            f"Project .claude/settings.json (only applies if this IS a project "
+            f"root) — allow: {'yes' if eff['project_allow'] else 'no'}, "
+            f"deny: {'yes' if eff['project_deny'] else 'no'}",
+            f"Claude Desktop filesystem MCP server — allow: "
+            f"{'yes' if eff['cd_allow'] else 'no'}",
+            "",
+            f"Effective verdict: {eff['verdict'].upper()}"
+            + (" (a deny rule wins over any allow)" if eff["verdict"] == "deny" else ""),
+        ]
+        messagebox.showinfo("ClAuSy — Effective Permissions", "\n".join(lines))
+
     def _scan_gitignored_secrets(self):
         found = []
         for d in self._project_dirs():
@@ -1115,7 +1143,8 @@ class ClausyApp:
                              is_denied=_norm(entry.get("path", "")) in denied,
                              is_sensitive=config_manager.is_sensitive_system_path(
                                  entry.get("path", "")),
-                             on_remove=self._remove_single_path)
+                             on_remove=self._remove_single_path,
+                             on_show_permissions=self._show_effective_permissions)
             r.place(i)
             self._rows.append(r)
         self._configure_row_grid(self._sf)

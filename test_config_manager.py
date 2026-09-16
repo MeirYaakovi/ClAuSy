@@ -856,5 +856,65 @@ class TestFindUnsafeBashWildcards(unittest.TestCase):
         self.assertEqual(config_manager.find_unsafe_bash_wildcards(""), [])
 
 
+class TestGetEffectivePermissions(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.target = os.path.join(self.tmp, "project")
+        os.makedirs(self.target)
+
+    def _write_cc(self, perms):
+        p = os.path.join(self.tmp, "cc_settings.json")
+        with open(p, "w", encoding="utf-8") as f:
+            json.dump({"permissions": perms}, f)
+        return p
+
+    def test_no_signals_anywhere_is_ask(self):
+        result = config_manager.get_effective_permissions(self.target, "", "")
+        self.assertEqual(result["verdict"], "ask")
+
+    def test_global_allow_gives_allow_verdict(self):
+        cc = self._write_cc({"allow": [self.target]})
+        result = config_manager.get_effective_permissions(self.target, cc, "")
+        self.assertTrue(result["global_allow"])
+        self.assertEqual(result["verdict"], "allow")
+
+    def test_global_deny_wins_over_global_allow(self):
+        cc = self._write_cc({"allow": [self.target], "deny": [self.target]})
+        result = config_manager.get_effective_permissions(self.target, cc, "")
+        self.assertEqual(result["verdict"], "deny")
+
+    def test_project_level_allow_detected(self):
+        claude_dir = os.path.join(self.target, ".claude")
+        os.makedirs(claude_dir)
+        with open(os.path.join(claude_dir, "settings.json"), "w", encoding="utf-8") as f:
+            json.dump({"permissions": {"additionalDirectories": [self.target]}}, f)
+        result = config_manager.get_effective_permissions(self.target, "", "")
+        self.assertTrue(result["project_allow"])
+        self.assertEqual(result["verdict"], "allow")
+
+    def test_project_deny_wins_over_global_allow(self):
+        cc = self._write_cc({"allow": [self.target]})
+        claude_dir = os.path.join(self.target, ".claude")
+        os.makedirs(claude_dir)
+        with open(os.path.join(claude_dir, "settings.json"), "w", encoding="utf-8") as f:
+            json.dump({"permissions": {"deny": [self.target]}}, f)
+        result = config_manager.get_effective_permissions(self.target, cc, "")
+        self.assertEqual(result["verdict"], "deny")
+
+    def test_cd_allow_detected(self):
+        cd = os.path.join(self.tmp, "cd_config.json")
+        with open(cd, "w", encoding="utf-8") as f:
+            json.dump({"mcpServers": {"filesystem": {"args": [self.target]}}}, f)
+        result = config_manager.get_effective_permissions(self.target, "", cd)
+        self.assertTrue(result["cd_allow"])
+        self.assertEqual(result["verdict"], "allow")
+
+    def test_unrelated_directory_not_allowed(self):
+        cc = self._write_cc({"allow": [self.target]})
+        other = os.path.join(self.tmp, "other")
+        result = config_manager.get_effective_permissions(other, cc, "")
+        self.assertEqual(result["verdict"], "ask")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
