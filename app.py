@@ -499,7 +499,9 @@ class ClausyApp:
         btn(btn_f, "🐞 Report Confusing Config",
             lambda: webbrowser.open(REPORT_ISSUE_URL)          ).pack(side="left", padx=(0, 10))
         btn(btn_f, "📋 Copy Diagnostics",
-            self._copy_diagnostics                             ).pack(side="left")
+            self._copy_diagnostics                             ).pack(side="left", padx=(0, 10))
+        btn(btn_f, "▶ Test statusLine",
+            self._check_statusline                             ).pack(side="left")
 
         self._status_lbl = ctk.CTkLabel(wrap, text="", fg_color="transparent",
                                         text_color=DIM, font=("Segoe UI", 10), anchor="w")
@@ -1019,6 +1021,21 @@ class ClausyApp:
         self.root.clipboard_clear()
         self.root.clipboard_append(summary)
         self._set_status("Diagnostics copied to clipboard — paste into a GitHub issue.", CC_G)
+
+    def _check_statusline(self):
+        cc = self._cc_var.get().strip()
+        if not cc:
+            messagebox.showerror("ClAuSy", "No Claude Code settings.json path set.\n"
+                                           "Go to Settings and set/Auto-Detect it first.")
+            return
+        result = config_manager.run_statusline_check(cc)
+        if not result["configured"]:
+            self._set_status(
+                result["error"] or "No statusLine command configured in settings.json.", DIM)
+        elif result["ok"]:
+            self._set_status(f"statusLine ran OK — output: {result['output'] or '(empty)'}", CC_G)
+        else:
+            self._set_status(f"statusLine failed — {result['error']}", CC_R)
 
     def _run_permission_simulator(self):
         target = self._sim_var.get().strip()

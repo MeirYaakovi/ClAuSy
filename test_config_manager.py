@@ -462,6 +462,49 @@ class TestFindCdConfigCandidates(unittest.TestCase):
         self.assertEqual(result["cd_config"], str(classic_file))
 
 
+class TestRunStatuslineCheck(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def _write(self, data):
+        p = os.path.join(self.tmp, "settings.json")
+        with open(p, "w", encoding="utf-8") as f:
+            json.dump(data, f)
+        return p
+
+    def test_blank_path_not_configured(self):
+        result = config_manager.run_statusline_check("")
+        self.assertFalse(result["configured"])
+
+    def test_no_statusline_key_not_configured(self):
+        p = self._write({"permissions": {}})
+        result = config_manager.run_statusline_check(p)
+        self.assertFalse(result["configured"])
+
+    def test_working_command_reports_ok_and_output(self):
+        p = self._write({"statusLine": {"type": "command", "command": "echo hello-status"}})
+        result = config_manager.run_statusline_check(p)
+        self.assertTrue(result["configured"])
+        self.assertTrue(result["ok"])
+        self.assertIn("hello-status", result["output"])
+
+    def test_failing_command_reports_error(self):
+        p = self._write({"statusLine": {"type": "command",
+                                        "command": "python -c \"import sys; sys.exit(1)\""}})
+        result = config_manager.run_statusline_check(p)
+        self.assertTrue(result["configured"])
+        self.assertFalse(result["ok"])
+        self.assertIn("1", result["error"])
+
+    def test_corrupt_file_returns_error(self):
+        p = os.path.join(self.tmp, "bad.json")
+        with open(p, "w") as f:
+            f.write("{broken")
+        result = config_manager.run_statusline_check(p)
+        self.assertFalse(result["configured"])
+        self.assertTrue(result["error"])
+
+
 class TestBuildDiagnosticsSummary(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()

@@ -233,6 +233,43 @@ def find_mcp_exposed_secrets(mcp_config_path: str) -> list:
     return found
 
 
+STATUSLINE_CHECK_TIMEOUT = 5
+
+
+def run_statusline_check(cc_settings: str) -> dict:
+    """Runs the statusLine command configured in cc_settings.json and
+    captures what actually happens — Claude Code's statusLine feature is
+    undocumented and has known platform bugs (e.g. exit 126 on native
+    Windows when the command assumes a POSIX shell), and previously
+    ClAuSy gave no way to see that short of restarting Claude Code and
+    watching the status bar. Returns {"configured": bool, "command": str,
+    "ok": bool, "output": str, "error": str}."""
+    if not cc_settings:
+        return {"configured": False, "command": "", "ok": False, "output": "", "error": ""}
+    try:
+        data = _load(cc_settings)
+    except ConfigError as e:
+        return {"configured": False, "command": "", "ok": False, "output": "", "error": str(e)}
+    status_line = data.get("statusLine")
+    command = status_line.get("command", "") if isinstance(status_line, dict) else ""
+    if not command:
+        return {"configured": False, "command": "", "ok": False, "output": "", "error": ""}
+    import subprocess
+    try:
+        r = subprocess.run(command, shell=True, capture_output=True, text=True,
+                           timeout=STATUSLINE_CHECK_TIMEOUT,
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        ok = r.returncode == 0
+        output = (r.stdout or "").strip()
+        error = "" if ok else ((r.stderr or "").strip() or f"exited with code {r.returncode}")
+        return {"configured": True, "command": command, "ok": ok, "output": output, "error": error}
+    except subprocess.TimeoutExpired:
+        return {"configured": True, "command": command, "ok": False, "output": "",
+                "error": f"timed out after {STATUSLINE_CHECK_TIMEOUT}s"}
+    except OSError as e:
+        return {"configured": True, "command": command, "ok": False, "output": "", "error": str(e)}
+
+
 def build_diagnostics_summary(cc_settings: str, cd_config: str) -> str:
     """Builds a redacted plain-text summary suitable for pasting into a
     GitHub issue — permission mode, which config files exist and their
