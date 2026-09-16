@@ -699,5 +699,78 @@ class TestFindGitignoredSecrets(unittest.TestCase):
             config_manager.find_gitignored_secrets(os.path.join(self.tmp, "nope")), [])
 
 
+class TestGetPermissionRules(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def _write(self, data):
+        p = os.path.join(self.tmp, "settings.json")
+        with open(p, "w", encoding="utf-8") as f:
+            json.dump(data, f)
+        return p
+
+    def test_blank_path_returns_empty_lists(self):
+        self.assertEqual(config_manager.get_permission_rules(""), ([], []))
+
+    def test_reads_allow_and_deny(self):
+        p = self._write({"permissions": {"allow": ["Bash(npm:*)"], "deny": ["Read(**/.env)"]}})
+        self.assertEqual(config_manager.get_permission_rules(p),
+                          (["Bash(npm:*)"], ["Read(**/.env)"]))
+
+    def test_corrupt_file_returns_empty_lists(self):
+        p = os.path.join(self.tmp, "bad.json")
+        with open(p, "w") as f:
+            f.write("{broken")
+        self.assertEqual(config_manager.get_permission_rules(p), ([], []))
+
+
+class TestSimulatePermission(unittest.TestCase):
+    def test_deny_wins_over_allow(self):
+        result = config_manager.simulate_permission(
+            ["Bash(npm:*)"], ["Bash(npm:*)"], "Bash(npm install)")
+        self.assertEqual(result["verdict"], "deny")
+
+    def test_allow_matches_wildcard_rule(self):
+        result = config_manager.simulate_permission(
+            ["Bash(npm:*)"], [], "Bash(npm install)")
+        self.assertEqual(result["verdict"], "allow")
+        self.assertEqual(result["allow_match"], "Bash(npm:*)")
+
+    def test_no_match_falls_back_to_ask(self):
+        result = config_manager.simulate_permission(
+            ["Bash(npm:*)"], [], "Bash(rm -rf /)")
+        self.assertEqual(result["verdict"], "ask")
+
+    def test_double_star_matches_any_depth(self):
+        result = config_manager.simulate_permission(
+            [], ["Read(**/.env)"], "Read(a/b/c/.env)")
+        self.assertEqual(result["verdict"], "deny")
+
+    def test_single_star_does_not_cross_path_separator(self):
+        result = config_manager.simulate_permission(
+            [], ["Read(*/.env)"], "Read(a/b/.env)")
+        self.assertEqual(result["verdict"], "ask")
+
+    def test_bare_absolute_path_rule(self):
+        result = config_manager.simulate_permission(
+            ["/home/user/project"], [], "/home/user/project")
+        self.assertEqual(result["verdict"], "allow")
+
+    def test_different_tool_does_not_match(self):
+        result = config_manager.simulate_permission(
+            ["Read(**/.env)"], [], "Bash(cat .env)")
+        self.assertEqual(result["verdict"], "ask")
+
+    def test_bash_colon_star_prefix_syntax(self):
+        result = config_manager.simulate_permission(
+            ["Bash(npm run build:*)"], [], "Bash(npm run build --watch)")
+        self.assertEqual(result["verdict"], "allow")
+
+    def test_bash_colon_star_does_not_match_unrelated_command(self):
+        result = config_manager.simulate_permission(
+            ["Bash(npm run build:*)"], [], "Bash(npm run test)")
+        self.assertEqual(result["verdict"], "ask")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

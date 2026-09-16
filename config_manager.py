@@ -2,6 +2,7 @@
 import fnmatch
 import json
 import os
+import re
 from datetime import datetime
 from pathlib import Path
 
@@ -242,6 +243,78 @@ def get_permission_mode(cc_settings: str) -> str | None:
     except ConfigError:
         return None
     return data.get("permissions", {}).get("defaultMode")
+
+
+def get_permission_rules(cc_settings: str) -> tuple:
+    """Returns (allow, deny) rule-string lists from permissions in
+    cc_settings.json, or ([], []) if unreadable."""
+    if not cc_settings:
+        return [], []
+    try:
+        data = _load(cc_settings)
+    except ConfigError:
+        return [], []
+    perms = data.get("permissions", {})
+    return list(perms.get("allow", [])), list(perms.get("deny", []))
+
+
+_RULE_RE = re.compile(r"^([A-Za-z]+)\((.*)\)$")
+
+
+def _rule_tool_and_pattern(rule: str) -> tuple:
+    m = _RULE_RE.match(rule)
+    if m:
+        return m.group(1), m.group(2)
+    return None, rule
+
+
+def _glob_to_regex(pattern: str):
+    """Translates Claude Code's rule-glob syntax to a regex: '**' matches
+    anything (including path separators), '*' matches within one path
+    segment only."""
+    placeholder = "\x00DOUBLESTAR\x00"
+    escaped = re.escape(pattern).replace(r"\*\*", placeholder)
+    escaped = escaped.replace(r"\*", r"[^/\\]*").replace(placeholder, ".*")
+    return re.compile("^" + escaped + "$")
+
+
+def _rule_matches(rule_pattern: str, target_val: str) -> bool:
+    """A trailing ':*' is Claude Code's Bash-rule prefix-match syntax (e.g.
+    'npm run build:*' matches any command starting with 'npm run build') —
+    distinct from the gitignore-style '*'/'**' glob used elsewhere, and a
+    frequent source of confusion (bare 'npm *' vs. correct 'npm:*')."""
+    if rule_pattern.endswith(":*"):
+        prefix = rule_pattern[:-2]
+        return target_val == prefix or target_val.startswith(prefix + " ")
+    return bool(_glob_to_regex(rule_pattern).match(target_val))
+
+
+def simulate_permission(allow: list, deny: list, target: str) -> dict:
+    """Tests `target` (e.g. "Bash(npm install)" or a bare absolute path)
+    against allow/deny rule lists using Claude Code's matching rules, and
+    returns which rule (if any) from each list matched, plus the resulting
+    verdict — deny always wins over allow, and no match at all means Claude
+    Code will ask. Returns {"verdict", "deny_match", "allow_match"}."""
+    target_tool, target_val = _rule_tool_and_pattern(target)
+
+    def find_match(rules):
+        for rule in rules:
+            rule_tool, rule_pattern = _rule_tool_and_pattern(rule)
+            if rule_tool != target_tool:
+                continue
+            if _rule_matches(rule_pattern, target_val):
+                return rule
+        return None
+
+    deny_match = find_match(deny)
+    allow_match = find_match(allow)
+    if deny_match:
+        verdict = "deny"
+    elif allow_match:
+        verdict = "allow"
+    else:
+        verdict = "ask"
+    return {"verdict": verdict, "deny_match": deny_match, "allow_match": allow_match}
 
 
 def find_allow_deny_conflicts(cc_settings: str) -> set:

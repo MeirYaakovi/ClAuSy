@@ -505,6 +505,32 @@ class ClausyApp:
         self._schema_banner.grid(row=8, column=0, sticky="ew", pady=(10, 0))
         self._schema_banner.grid_remove()
 
+        sim_f = ctk.CTkFrame(wrap, fg_color=SURF2, corner_radius=8)
+        sim_f.grid(row=9, column=0, sticky="ew", pady=(14, 0))
+        sim_inner = ctk.CTkFrame(sim_f, fg_color="transparent")
+        sim_inner.pack(fill="x", padx=12, pady=10)
+        ctk.CTkLabel(
+            sim_inner, text="Permission rule simulator — test a command/path against "
+                             "the current allow/deny rules",
+            fg_color="transparent", text_color=TEXT, font=("Segoe UI", 10, "bold"),
+            anchor="w").pack(anchor="w")
+        sim_row = ctk.CTkFrame(sim_inner, fg_color="transparent")
+        sim_row.pack(fill="x", pady=(6, 0))
+        self._sim_var = tk.StringVar()
+        sim_entry = ctk.CTkEntry(
+            sim_row, textvariable=self._sim_var, fg_color=SURF3, text_color=TEXT,
+            border_color=OFF, border_width=1, font=("Consolas", 10), height=30,
+            placeholder_text="e.g. Bash(npm install) or an absolute path")
+        sim_entry.pack(side="left", fill="x", expand=True, padx=(0, 8))
+        sim_entry.bind("<Return>", lambda e: self._run_permission_simulator())
+        ctk.CTkButton(sim_row, text="Test", width=70, height=30, fg_color=ACCENT,
+                     hover_color=ACC2, text_color="white",
+                     command=self._run_permission_simulator).pack(side="left")
+        self._sim_result_lbl = ctk.CTkLabel(
+            sim_inner, text="", fg_color="transparent", text_color=DIM,
+            font=("Segoe UI", 9), anchor="w", justify="left", wraplength=760)
+        self._sim_result_lbl.pack(anchor="w", pady=(6, 0))
+
     def _refresh_cd_candidates(self):
         for w in self._cd_candidates_frame.winfo_children():
             w.destroy()
@@ -869,6 +895,23 @@ class ClausyApp:
             self._set_status(f"Added {added} deny rule(s) for secret files.", CC_G)
         else:
             self._set_status("All secret-file deny rules were already present.", DIM)
+
+    def _run_permission_simulator(self):
+        target = self._sim_var.get().strip()
+        if not target:
+            return
+        allow, deny = config_manager.get_permission_rules(self._cc_var.get())
+        result = config_manager.simulate_permission(allow, deny, target)
+        verdict = result["verdict"]
+        color = {"deny": CC_R, "allow": CC_G, "ask": WARN}[verdict]
+        if verdict == "deny":
+            detail = f"Matched deny rule: {result['deny_match']}"
+        elif verdict == "allow":
+            detail = f"Matched allow rule: {result['allow_match']}"
+        else:
+            detail = "No allow or deny rule matches — Claude Code will ask for permission."
+        self._sim_result_lbl.configure(
+            text=f"Verdict: {verdict.upper()} — {detail}", text_color=color)
 
     def _scan_gitignored_secrets(self):
         found = []
