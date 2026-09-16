@@ -163,6 +163,55 @@ def is_ancestor(path: str, ancestor_sha: str, descendant_ref: str = "HEAD") -> b
     return r.returncode == 0
 
 
+def _hook_commands_at_ref(path: str, ref: str) -> set | None:
+    """Hook shell commands configured in .claude/settings.json as it existed
+    at `ref`, or None if the file didn't exist there / couldn't be parsed."""
+    import json
+    r = _run_git(path, ["show", f"{ref}:.claude/settings.json"])
+    if r is None or r.returncode != 0:
+        return None
+    try:
+        data = json.loads(r.stdout)
+    except ValueError:
+        return None
+    commands = set()
+    for event_value in data.get("hooks", {}).values():
+        if not isinstance(event_value, list):
+            continue
+        for group in event_value:
+            if not isinstance(group, dict):
+                continue
+            for h in group.get("hooks", []):
+                if isinstance(h, dict) and h.get("type") == "command" and h.get("command"):
+                    commands.add(h["command"])
+    return commands
+
+
+def find_hooks_changed_since(path: str, old_sha: str) -> dict | None:
+    """Compares .claude/settings.json hooks between `old_sha` (typically the
+    last HEAD ClAuSy saw for this repo) and the current HEAD. A same-repo
+    hook injected via a pulled commit — the CVE-2025-59536 pattern — runs at
+    session start before any trust prompt, so surfacing exactly what changed
+    is more actionable than the generic 'file changed externally' warning.
+    Returns None if there's nothing to compare (no prior sha, or the file
+    didn't exist at one end and doesn't at the other). Otherwise
+    {"added": [...], "removed": [...]} — both empty means hooks are
+    unchanged."""
+    if not old_sha:
+        return None
+    old_commands = _hook_commands_at_ref(path, old_sha)
+    new_commands = _hook_commands_at_ref(path, "HEAD")
+    if old_commands is None and new_commands is None:
+        return None
+    old_commands = old_commands or set()
+    new_commands = new_commands or set()
+    added = sorted(new_commands - old_commands)
+    removed = sorted(old_commands - new_commands)
+    if not added and not removed:
+        return None
+    return {"added": added, "removed": removed}
+
+
 def push_repo(path: str) -> dict:
     """Runs `git push` in `path`. Returns {"ok", "output"}."""
     r = _run_git(path, ["push"], timeout=PUSH_TIMEOUT)

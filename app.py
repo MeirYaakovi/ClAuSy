@@ -1912,10 +1912,12 @@ class ClausyApp:
             r["new_branch"] = is_new
 
             previous_head = storage.note_head_seen(last_heads, r["path"], r.get("head_sha", ""))
+            r["hooks_changed"] = None
             if previous_head and previous_head != r.get("head_sha") and r.get("head_sha"):
                 ancestor = git_status.is_ancestor(r["path"], previous_head, r["head_sha"])
                 if ancestor is False:
                     r["history_rewritten"] = True
+                r["hooks_changed"] = git_status.find_hooks_changed_since(r["path"], previous_head)
         data["git_known_branches"] = known
         data["git_last_head"] = last_heads
         storage.save(data)
@@ -1995,6 +1997,15 @@ class ClausyApp:
                 self._git_badge(badges, "🌿 new branch", WARN)
             if repo.get("history_rewritten"):
                 self._git_badge(badges, "⚠ history rewritten (amend/rebase?)", WARN)
+            if repo.get("hooks_changed"):
+                hc = repo["hooks_changed"]
+                badge = self._git_badge(badges, "⚠ hooks changed since last pull", CC_R)
+                lines = []
+                if hc["added"]:
+                    lines.append("Added:\n" + "\n".join(hc["added"]))
+                if hc["removed"]:
+                    lines.append("Removed:\n" + "\n".join(hc["removed"]))
+                Tooltip(badge, "\n\n".join(lines))
 
         if repo["unpushed_commits"]:
             latest = repo["unpushed_commits"][0]
@@ -2034,9 +2045,10 @@ class ClausyApp:
         sep.grid(row=row + 1, column=0, columnspan=4, sticky="ew", pady=(0, 2))
 
     def _git_badge(self, parent, text, color):
-        ctk.CTkLabel(parent, text=text, fg_color=color, text_color="white", corner_radius=10,
-                    font=("Segoe UI", 9, "bold"), height=20, padx=8
-                    ).pack(side="left", padx=(0, 6))
+        lbl = ctk.CTkLabel(parent, text=text, fg_color=color, text_color="white", corner_radius=10,
+                    font=("Segoe UI", 9, "bold"), height=20, padx=8)
+        lbl.pack(side="left", padx=(0, 6))
+        return lbl
 
     def _push_selected(self):
         selected = [(p, r["name"]) for p, v in self._git_vars.items() if v.get()
