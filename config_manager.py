@@ -168,6 +168,26 @@ def file_fingerprint(path: str) -> tuple | None:
     return (st.st_mtime_ns, st.st_size)
 
 
+KNOWN_SETTINGS_KEYS = {
+    "permissions", "hooks", "model", "env", "apiKeyHelper",
+    "cleanupPeriodDays", "includeCoAuthoredBy", "statusLine", "outputStyle",
+    "enabledPlugins", "extraKnownMarketplaces", "forceLoginMethod",
+    "spinnerTipsEnabled", "editorMode", "autoUpdates", "$schema",
+    "teammateDefaultModel",
+}
+
+
+def find_unknown_keys(cc_settings: str) -> list:
+    """Returns top-level keys in cc_settings.json that ClAuSy doesn't
+    recognize — a possible typo or a renamed/deprecated setting silently
+    doing nothing. Claude Code has no officially published settings.json
+    schema, so unknown keys are otherwise easy to miss."""
+    if not cc_settings:
+        return []
+    data = _load(cc_settings)
+    return sorted(set(data.keys()) - KNOWN_SETTINGS_KEYS)
+
+
 def get_permission_mode(cc_settings: str) -> str | None:
     """Returns permissions.defaultMode from cc_settings.json, or None if the
     file is missing/unreadable or the key isn't set."""

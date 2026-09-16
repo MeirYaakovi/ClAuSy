@@ -636,5 +636,31 @@ class TestFindOverlappingPaths(unittest.TestCase):
         self.assertEqual(result, set())
 
 
+class TestFindUnknownKeys(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def _write(self, data):
+        p = os.path.join(self.tmp, "settings.json")
+        with open(p, "w", encoding="utf-8") as f:
+            json.dump(data, f)
+        return p
+
+    def test_blank_path_returns_empty(self):
+        self.assertEqual(config_manager.find_unknown_keys(""), [])
+
+    def test_all_known_keys_returns_empty(self):
+        p = self._write({"permissions": {}, "hooks": {}, "model": "opus"})
+        self.assertEqual(config_manager.find_unknown_keys(p), [])
+
+    def test_flags_unknown_key(self):
+        p = self._write({"permissions": {}, "totallyMadeUpKey": True})
+        self.assertEqual(config_manager.find_unknown_keys(p), ["totallyMadeUpKey"])
+
+    def test_missing_file_returns_empty(self):
+        p = os.path.join(self.tmp, "missing.json")
+        self.assertEqual(config_manager.find_unknown_keys(p), [])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

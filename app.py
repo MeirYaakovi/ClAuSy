@@ -495,6 +495,13 @@ class ClausyApp:
         self._yolo_banner.grid(row=7, column=0, sticky="ew", pady=(10, 0))
         self._yolo_banner.grid_remove()
 
+        self._schema_banner = ctk.CTkLabel(
+            wrap, text="", fg_color="#3a2a1a", text_color=WARN, corner_radius=6,
+            font=("Segoe UI", 10, "bold"), anchor="w", justify="left", wraplength=760,
+            padx=12, pady=10)
+        self._schema_banner.grid(row=8, column=0, sticky="ew", pady=(10, 0))
+        self._schema_banner.grid_remove()
+
     def _refresh_cd_candidates(self):
         for w in self._cd_candidates_frame.winfo_children():
             w.destroy()
@@ -541,6 +548,25 @@ class ClausyApp:
             self._yolo_banner.grid()
         else:
             self._yolo_banner.grid_remove()
+
+    def _check_unknown_settings_keys(self):
+        cc = self._cc_var.get().strip()
+        if not cc:
+            self._schema_banner.grid_remove()
+            return
+        try:
+            unknown = config_manager.find_unknown_keys(cc)
+        except config_manager.ConfigError:
+            self._schema_banner.grid_remove()
+            return
+        if unknown:
+            self._schema_banner.configure(
+                text=f"⚠ settings.json has {len(unknown)} top-level key(s) ClAuSy "
+                     f"doesn't recognize — possibly a typo or a renamed/removed "
+                     f"setting doing nothing: {', '.join(unknown)}")
+            self._schema_banner.grid()
+        else:
+            self._schema_banner.grid_remove()
 
     # ── Directories tab ───────────────────────────────────────────────────────
 
@@ -877,6 +903,7 @@ class ClausyApp:
             else:
                 self._set_status("Config files look good ✔", CC_G)
         self._check_permission_mode()
+        self._check_unknown_settings_keys()
         self._refresh_cd_candidates()
 
     # ── entry management ─────────────────────────────────────────────────────
