@@ -434,6 +434,35 @@ def _path_set(rules: list) -> set:
     return {os.path.normpath(p) for p in rules if os.path.isabs(p)}
 
 
+def find_bypass_precedence_blindspots(cc_settings: str, project_dirs: list) -> list:
+    """Claude Code's settings merge is precedence-based, not additive: a
+    project's own .claude/settings.json permissions block takes precedence
+    over the user-level settings.json, even when it doesn't repeat
+    defaultMode. So a global defaultMode: bypassPermissions (YOLO mode) can
+    silently NOT apply inside a project that defines its own permissions
+    block — a documented source of confusion, since nothing announces the
+    override. Returns the project directories where this applies."""
+    if not cc_settings:
+        return []
+    global_mode = get_permission_mode(cc_settings)
+    if global_mode != "bypassPermissions":
+        return []
+    flagged = []
+    for d in project_dirs:
+        if not d:
+            continue
+        project_settings = Path(d) / ".claude" / "settings.json"
+        if not project_settings.is_file():
+            continue
+        try:
+            pdata = _load(str(project_settings))
+        except ConfigError:
+            continue
+        if "permissions" in pdata:
+            flagged.append(d)
+    return flagged
+
+
 def get_effective_permissions(directory: str, cc_settings: str, cd_config: str) -> dict:
     """Merges permission signals for one directory across every layer
     ClAuSy can see: the global cc_settings.json, that directory's own

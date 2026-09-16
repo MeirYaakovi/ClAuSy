@@ -567,6 +567,54 @@ class TestIsZeroDenyBypassCombo(unittest.TestCase):
         self.assertFalse(config_manager.is_zero_deny_bypass_combo(p))
 
 
+class TestFindBypassPrecedenceBlindspots(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.cc = os.path.join(self.tmp, "settings.json")
+        self.proj = os.path.join(self.tmp, "myproj")
+        os.makedirs(os.path.join(self.proj, ".claude"), exist_ok=True)
+
+    def _write_cc(self, mode):
+        with open(self.cc, "w", encoding="utf-8") as f:
+            json.dump({"permissions": {"defaultMode": mode}}, f)
+
+    def _write_project_settings(self, data):
+        p = os.path.join(self.proj, ".claude", "settings.json")
+        with open(p, "w", encoding="utf-8") as f:
+            json.dump(data, f)
+
+    def test_blank_cc_settings_returns_empty(self):
+        self.assertEqual(config_manager.find_bypass_precedence_blindspots("", [self.proj]), [])
+
+    def test_non_bypass_mode_returns_empty(self):
+        self._write_cc("acceptEdits")
+        self._write_project_settings({"permissions": {"deny": ["Read(**/.env)"]}})
+        self.assertEqual(
+            config_manager.find_bypass_precedence_blindspots(self.cc, [self.proj]), [])
+
+    def test_project_with_permissions_block_flagged(self):
+        self._write_cc("bypassPermissions")
+        self._write_project_settings({"permissions": {"deny": ["Read(**/.env)"]}})
+        result = config_manager.find_bypass_precedence_blindspots(self.cc, [self.proj])
+        self.assertEqual(result, [self.proj])
+
+    def test_project_without_permissions_block_not_flagged(self):
+        self._write_cc("bypassPermissions")
+        self._write_project_settings({"model": "opus"})
+        self.assertEqual(
+            config_manager.find_bypass_precedence_blindspots(self.cc, [self.proj]), [])
+
+    def test_project_without_settings_file_not_flagged(self):
+        self._write_cc("bypassPermissions")
+        self.assertEqual(
+            config_manager.find_bypass_precedence_blindspots(self.cc, [self.proj]), [])
+
+    def test_blank_project_dir_skipped(self):
+        self._write_cc("bypassPermissions")
+        self.assertEqual(
+            config_manager.find_bypass_precedence_blindspots(self.cc, ["", None]), [])
+
+
 class TestFindAllowDenyConflicts(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()

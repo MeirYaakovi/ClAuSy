@@ -545,8 +545,15 @@ class ClausyApp:
         self._mcp_secrets_banner.grid(row=12, column=0, sticky="ew", pady=(10, 0))
         self._mcp_secrets_banner.grid_remove()
 
+        self._precedence_banner = ctk.CTkLabel(
+            wrap, text="", fg_color="#3a2a1a", text_color=WARN, corner_radius=6,
+            font=("Segoe UI", 10, "bold"), anchor="w", justify="left", wraplength=760,
+            padx=12, pady=10)
+        self._precedence_banner.grid(row=13, column=0, sticky="ew", pady=(10, 0))
+        self._precedence_banner.grid_remove()
+
         sim_f = ctk.CTkFrame(wrap, fg_color=SURF2, corner_radius=8)
-        sim_f.grid(row=13, column=0, sticky="ew", pady=(14, 0))
+        sim_f.grid(row=14, column=0, sticky="ew", pady=(14, 0))
         sim_inner = ctk.CTkFrame(sim_f, fg_color="transparent")
         sim_inner.pack(fill="x", padx=12, pady=10)
         ctk.CTkLabel(
@@ -705,6 +712,22 @@ class ClausyApp:
             self._mcp_secrets_banner.grid()
         else:
             self._mcp_secrets_banner.grid_remove()
+
+    def _check_bypass_precedence_blindspots(self):
+        cc = self._cc_var.get().strip()
+        flagged = config_manager.find_bypass_precedence_blindspots(
+            cc, self._project_dirs()) if cc else []
+        if flagged:
+            names = ", ".join(os.path.basename(p) or p for p in flagged)
+            self._precedence_banner.configure(
+                text=f"⚠ bypassPermissions (YOLO mode) is set globally, but "
+                     f"{len(flagged)} tracked project(s) have their own "
+                     f".claude/settings.json permissions block, which takes "
+                     f"precedence over the global one — bypass mode likely does NOT "
+                     f"apply inside: {names}.")
+            self._precedence_banner.grid()
+        else:
+            self._precedence_banner.grid_remove()
 
     # ── Directories tab ───────────────────────────────────────────────────────
 
@@ -1102,6 +1125,7 @@ class ClausyApp:
         self._check_tracked_settings_local()
         self._check_zero_deny_bypass_combo()
         self._check_mcp_exposed_secrets()
+        self._check_bypass_precedence_blindspots()
         self._refresh_cd_candidates()
 
     # ── entry management ─────────────────────────────────────────────────────
