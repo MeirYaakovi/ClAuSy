@@ -30,6 +30,30 @@ def is_git_repo(path: str) -> bool:
     return os.path.isdir(os.path.join(path, ".git"))
 
 
+def is_path_tracked(repo_path: str, rel_path: str) -> bool:
+    """True if `rel_path` (relative to `repo_path`, forward or back slashes
+    both fine) is tracked by git in that repo."""
+    r = _run_git(repo_path, ["ls-files", "--error-unmatch", rel_path.replace("\\", "/")])
+    return r is not None and r.returncode == 0
+
+
+def find_tracked_settings_local(project_dirs: list) -> list:
+    """Flags tracked directories whose .claude/settings.local.json is
+    accidentally committed to git instead of gitignored — that file is
+    meant to hold personal/local-only overrides, so committing it can leak
+    per-developer settings or just cause noisy merge conflicts. Returns the
+    settings.local.json paths that are tracked."""
+    flagged = []
+    for d in project_dirs:
+        if not d or not is_git_repo(d):
+            continue
+        rel = os.path.join(".claude", "settings.local.json")
+        full = os.path.join(d, rel)
+        if os.path.isfile(full) and is_path_tracked(d, rel):
+            flagged.append(full)
+    return flagged
+
+
 def find_git_repos(project_dirs: list) -> list:
     """Returns absolute paths of git repos found among the tracked project
     directories: a tracked dir that's itself a repo is included directly;

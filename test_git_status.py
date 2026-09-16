@@ -124,5 +124,51 @@ class TestFindGitRepos(unittest.TestCase):
         self.assertEqual(git_status.find_git_repos([empty]), [])
 
 
+class TestFindTrackedSettingsLocal(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _make_repo_with_settings_local(self, name, gitignored):
+        repo = os.path.join(self.tmp, name)
+        _init_repo(repo)
+        claude_dir = os.path.join(repo, ".claude")
+        os.makedirs(claude_dir)
+        with open(os.path.join(claude_dir, "settings.local.json"), "w") as f:
+            f.write("{}")
+        if gitignored:
+            with open(os.path.join(repo, ".gitignore"), "w") as f:
+                f.write(".claude/settings.local.json\n")
+            _git(repo, "add", ".gitignore")
+        else:
+            _git(repo, "add", "-f", ".claude/settings.local.json")
+        _commit(repo, filename="README.md", content="x", message="init")
+        return repo
+
+    def test_flags_tracked_settings_local(self):
+        repo = self._make_repo_with_settings_local("tracked", gitignored=False)
+        flagged = git_status.find_tracked_settings_local([repo])
+        self.assertEqual(len(flagged), 1)
+
+    def test_gitignored_settings_local_not_flagged(self):
+        repo = self._make_repo_with_settings_local("ignored", gitignored=True)
+        self.assertEqual(git_status.find_tracked_settings_local([repo]), [])
+
+    def test_no_settings_local_file_not_flagged(self):
+        repo = os.path.join(self.tmp, "plain")
+        _init_repo(repo)
+        _commit(repo)
+        self.assertEqual(git_status.find_tracked_settings_local([repo]), [])
+
+    def test_non_git_dir_not_flagged(self):
+        plain = os.path.join(self.tmp, "not_a_repo")
+        os.makedirs(os.path.join(plain, ".claude"))
+        with open(os.path.join(plain, ".claude", "settings.local.json"), "w") as f:
+            f.write("{}")
+        self.assertEqual(git_status.find_tracked_settings_local([plain]), [])
+
+
 if __name__ == "__main__":
     unittest.main()

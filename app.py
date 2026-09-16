@@ -517,8 +517,15 @@ class ClausyApp:
         self._wildcard_banner.grid(row=9, column=0, sticky="ew", pady=(10, 0))
         self._wildcard_banner.grid_remove()
 
+        self._tracked_local_banner = ctk.CTkLabel(
+            wrap, text="", fg_color="#3a2a1a", text_color=WARN, corner_radius=6,
+            font=("Segoe UI", 10, "bold"), anchor="w", justify="left", wraplength=760,
+            padx=12, pady=10)
+        self._tracked_local_banner.grid(row=10, column=0, sticky="ew", pady=(10, 0))
+        self._tracked_local_banner.grid_remove()
+
         sim_f = ctk.CTkFrame(wrap, fg_color=SURF2, corner_radius=8)
-        sim_f.grid(row=10, column=0, sticky="ew", pady=(14, 0))
+        sim_f.grid(row=11, column=0, sticky="ew", pady=(14, 0))
         sim_inner = ctk.CTkFrame(sim_f, fg_color="transparent")
         sim_inner.pack(fill="x", padx=12, pady=10)
         ctk.CTkLabel(
@@ -641,6 +648,17 @@ class ClausyApp:
             self._wildcard_banner.grid()
         else:
             self._wildcard_banner.grid_remove()
+
+    def _check_tracked_settings_local(self):
+        flagged = git_status.find_tracked_settings_local(self._project_dirs())
+        if flagged:
+            self._tracked_local_banner.configure(
+                text=f"⚠ {len(flagged)} settings.local.json file(s) are committed to git "
+                     f"instead of gitignored — that file is meant for personal/local-only "
+                     f"overrides: {', '.join(flagged)}")
+            self._tracked_local_banner.grid()
+        else:
+            self._tracked_local_banner.grid_remove()
 
     # ── Directories tab ───────────────────────────────────────────────────────
 
@@ -1014,6 +1032,7 @@ class ClausyApp:
         self._check_permission_mode()
         self._check_unknown_settings_keys()
         self._check_unsafe_bash_wildcards()
+        self._check_tracked_settings_local()
         self._refresh_cd_candidates()
 
     # ── entry management ─────────────────────────────────────────────────────
