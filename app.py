@@ -1611,6 +1611,22 @@ class ClausyApp:
                                allow_create=True)
             r += 1
 
+        rules_files = claude_meta.find_rules_files(self._project_dirs())
+        if rules_files:
+            sep_r = ctk.CTkFrame(self._claudemd_scroll, fg_color=OFF, height=1)
+            sep_r.grid(row=r, column=0, columnspan=3, sticky="ew", pady=14)
+            r += 1
+            ctk.CTkLabel(
+                self._claudemd_scroll,
+                text=".claude/rules/*.md — a separate instruction source Claude Code "
+                     "also loads for these projects",
+                fg_color="transparent", text_color=DIM, font=("Segoe UI", 9),
+                anchor="w").grid(row=r, column=0, columnspan=3, sticky="w", pady=(0, 4))
+            r += 1
+            for rf in rules_files:
+                self._claudemd_row(self._claudemd_scroll, r, rf["label"], rf["path"], True)
+                r += 1
+
         sep = ctk.CTkFrame(self._claudemd_scroll, fg_color=OFF, height=1)
         sep.grid(row=r, column=0, columnspan=3, sticky="ew", pady=14)
         r += 1

@@ -37,6 +37,10 @@ def project_settings_file(project_dir: str) -> Path:
     return Path(project_dir) / ".claude" / "settings.json"
 
 
+def project_rules_dir(project_dir: str) -> Path:
+    return Path(project_dir) / ".claude" / "rules"
+
+
 def find_claude_md_files(project_dirs: list) -> list:
     """Returns [{"scope", "label", "path", "exists"}] for the global CLAUDE.md
     plus one entry per project_dirs that has (or could have) a CLAUDE.md."""
@@ -58,6 +62,28 @@ def find_claude_md_files(project_dirs: list) -> list:
             "path": str(p),
             "exists": p.is_file(),
         })
+    return out
+
+
+def find_rules_files(project_dirs: list) -> list:
+    """Returns [{"label","path"}] — one entry per *.md file under each
+    project's .claude/rules/ directory. Claude Code loads these as an
+    additional, separate instruction source alongside CLAUDE.md, but
+    ClAuSy's CLAUDE.md Map tab didn't previously list them at all, so a
+    project relying on rules files looked like it had no project-level
+    instructions."""
+    out = []
+    seen_dirs = set()
+    for d in project_dirs:
+        if not d or d in seen_dirs:
+            continue
+        seen_dirs.add(d)
+        rules_dir = project_rules_dir(d)
+        if not rules_dir.is_dir():
+            continue
+        label = Path(d).name or d
+        for f in sorted(rules_dir.glob("*.md")):
+            out.append({"label": f"{label} / rules / {f.name}", "path": str(f)})
     return out
 
 

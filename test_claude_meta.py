@@ -39,6 +39,37 @@ class TestFindClaudeMdFiles(unittest.TestCase):
         self.assertEqual(len(result), 2)
 
 
+class TestFindRulesFiles(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def test_no_rules_dir_returns_empty(self):
+        self.assertEqual(claude_meta.find_rules_files([self.tmp]), [])
+
+    def test_finds_md_files_in_rules_dir(self):
+        rules_dir = Path(self.tmp) / ".claude" / "rules"
+        rules_dir.mkdir(parents=True)
+        (rules_dir / "testing.md").write_text("# testing rules", encoding="utf-8")
+        (rules_dir / "style.md").write_text("# style rules", encoding="utf-8")
+        result = claude_meta.find_rules_files([self.tmp])
+        self.assertEqual(len(result), 2)
+        names = {Path(r["path"]).name for r in result}
+        self.assertEqual(names, {"testing.md", "style.md"})
+
+    def test_non_md_files_ignored(self):
+        rules_dir = Path(self.tmp) / ".claude" / "rules"
+        rules_dir.mkdir(parents=True)
+        (rules_dir / "notes.txt").write_text("not markdown", encoding="utf-8")
+        self.assertEqual(claude_meta.find_rules_files([self.tmp]), [])
+
+    def test_blank_and_duplicate_dirs_skipped(self):
+        rules_dir = Path(self.tmp) / ".claude" / "rules"
+        rules_dir.mkdir(parents=True)
+        (rules_dir / "a.md").write_text("x", encoding="utf-8")
+        result = claude_meta.find_rules_files(["", None, self.tmp, self.tmp])
+        self.assertEqual(len(result), 1)
+
+
 class TestFindAgents(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
