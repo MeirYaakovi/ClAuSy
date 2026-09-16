@@ -200,7 +200,7 @@ class DirectoryRow:
 
     def __init__(self, parent, entry: dict, idx: int,
                  on_change=None, on_pre_change=None, is_overlap: bool = False,
-                 on_remove=None, is_denied: bool = False):
+                 on_remove=None, is_denied: bool = False, is_sensitive: bool = False):
         self.entry         = entry
         self.on_change     = on_change
         self.on_pre_change = on_pre_change
@@ -236,6 +236,11 @@ class DirectoryRow:
             warnings.append("This path is in BOTH an allow rule and a deny rule in "
                              "settings.json — the deny rule always wins, so the allow "
                              "grant here is silently doing nothing.")
+        if is_sensitive and has_permission:
+            warnings.append("This looks like a sensitive OS or credential directory "
+                             "(System32, /etc, ~/.ssh, ~/.aws, ...) — granting broad "
+                             "tool access here is higher risk than a normal project "
+                             "folder.")
         self.pl = ctk.CTkLabel(parent, text=(f"⚠ {path}" if warnings else path),
                                fg_color="transparent", text_color=(WARN if warnings else DIM),
                                font=("Consolas", 10), anchor="w", cursor="hand2")
@@ -1064,6 +1069,8 @@ class ClausyApp:
                              on_pre_change=self._push_undo,
                              is_overlap=_norm(entry.get("path", "")) in overlaps,
                              is_denied=_norm(entry.get("path", "")) in denied,
+                             is_sensitive=config_manager.is_sensitive_system_path(
+                                 entry.get("path", "")),
                              on_remove=self._remove_single_path)
             r.place(i)
             self._rows.append(r)

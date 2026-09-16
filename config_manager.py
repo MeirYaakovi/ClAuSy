@@ -358,6 +358,25 @@ def summarize_changes(old_entries: list, new_entries: list) -> dict:
     return {"added": added, "removed": removed, "changed": changed}
 
 
+SENSITIVE_EXACT_SEGMENTS = {"system32", "etc", "boot", "sys", "proc", "root"}
+SENSITIVE_SUBSTRINGS = [".ssh", ".aws", ".gnupg", "keychains"]
+
+
+def is_sensitive_system_path(path: str) -> bool:
+    """True if `path` looks like a sensitive OS/credential directory
+    (System32, /etc, ~/.ssh, ~/.aws, ...) rather than an ordinary project
+    folder — granting broad tool access there is materially higher risk.
+    Matches whole path segments for ambiguous short names (so a folder
+    named "myroot" isn't flagged) and substrings for distinctive ones."""
+    if not path:
+        return False
+    normalized = path.replace("\\", "/").lower()
+    segments = [s for s in normalized.split("/") if s]
+    if any(seg in SENSITIVE_EXACT_SEGMENTS for seg in segments):
+        return True
+    return any(marker in normalized for marker in SENSITIVE_SUBSTRINGS)
+
+
 def find_overlapping_paths(paths: list) -> set:
     """Returns the subset of `paths` that is an ancestor (or descendant) of
     another path in the same list — e.g. tracking both C:\\proj and

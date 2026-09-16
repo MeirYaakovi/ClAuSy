@@ -772,5 +772,31 @@ class TestSimulatePermission(unittest.TestCase):
         self.assertEqual(result["verdict"], "ask")
 
 
+class TestIsSensitiveSystemPath(unittest.TestCase):
+    def test_blank_path_not_sensitive(self):
+        self.assertFalse(config_manager.is_sensitive_system_path(""))
+
+    def test_windows_system32_flagged(self):
+        self.assertTrue(config_manager.is_sensitive_system_path(r"C:\Windows\System32"))
+
+    def test_etc_flagged(self):
+        self.assertTrue(config_manager.is_sensitive_system_path("/etc"))
+
+    def test_ssh_dir_flagged(self):
+        self.assertTrue(config_manager.is_sensitive_system_path("/home/user/.ssh"))
+
+    def test_aws_dir_flagged(self):
+        self.assertTrue(config_manager.is_sensitive_system_path(r"C:\Users\me\.aws"))
+
+    def test_ordinary_project_path_not_flagged(self):
+        self.assertFalse(config_manager.is_sensitive_system_path(r"C:\meir\Projects\ClAuSy"))
+
+    def test_folder_named_myroot_not_falsely_flagged(self):
+        self.assertFalse(config_manager.is_sensitive_system_path("/home/user/myroot"))
+
+    def test_folder_literally_named_root_flagged(self):
+        self.assertTrue(config_manager.is_sensitive_system_path("/root"))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
