@@ -1637,6 +1637,17 @@ class ClausyApp:
         threading.Thread(target=worker, daemon=True).start()
 
     def _on_gitpush_scanned(self, repos: list):
+        data = storage.load()
+        known = data.get("git_known_branches", {})
+        for r in repos:
+            if r.get("error") or not r.get("branch"):
+                r["new_branch"] = False
+                continue
+            is_new, known = storage.note_branch_seen(known, r["path"], r["branch"])
+            r["new_branch"] = is_new
+        data["git_known_branches"] = known
+        storage.save(data)
+
         self._git_repos = repos
         self._git_vars = {r["path"]: tk.BooleanVar(value=False) for r in repos}
         self._set_git_busy(False, "")
@@ -1708,6 +1719,8 @@ class ClausyApp:
                 self._git_badge(badges, "⚠ direct on main", WARN)
             if repo.get("behind", 0) > 0:
                 self._git_badge(badges, f"⇕ {repo['behind']} behind — push may be rejected", WARN)
+            if repo.get("new_branch"):
+                self._git_badge(badges, "🌿 new branch", WARN)
 
         if repo["unpushed_commits"]:
             latest = repo["unpushed_commits"][0]
