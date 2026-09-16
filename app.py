@@ -1468,6 +1468,14 @@ class ClausyApp:
         agents = claude_meta.find_agents(project_dirs)
         hooks  = claude_meta.find_hooks(project_dirs)
         agent_issues = claude_meta.find_agent_description_issues(agents)
+        hook_issues: dict = {}
+        for d in claude_meta.find_dangerous_hook_commands(hooks):
+            hook_issues.setdefault((d["path"], d["event"]), []).append(
+                f"Command looks dangerous — {d['reason']}: {d['command']}")
+        for lr in claude_meta.find_hook_loop_risks(hooks):
+            hook_issues.setdefault((lr["path"], lr["event"]), []).append(
+                "This hook re-invokes 'claude', which risks an infinite loop or "
+                f"runaway logs if it fires on every session/prompt: {lr['command']}")
 
         r = 0
         self._agents_section_header(self._agents_scroll, r, f"Subagents ({len(agents)})")
@@ -1512,9 +1520,17 @@ class ClausyApp:
             ctk.CTkLabel(self._agents_scroll, text=h["scope_label"], fg_color="transparent",
                         text_color=DIM, font=("Segoe UI", 9), width=90, anchor="w"
                         ).grid(row=r, column=0, sticky="w", pady=3)
-            ctk.CTkLabel(self._agents_scroll, text=h["event"], fg_color="transparent",
-                        text_color=TEXT, font=("Segoe UI", 9, "bold"), width=140, anchor="w"
-                        ).grid(row=r, column=1, sticky="w", pady=3)
+            event_f = ctk.CTkFrame(self._agents_scroll, fg_color="transparent", width=140)
+            event_f.grid(row=r, column=1, sticky="w", pady=3)
+            ctk.CTkLabel(event_f, text=h["event"], fg_color="transparent",
+                        text_color=TEXT, font=("Segoe UI", 9, "bold"), anchor="w"
+                        ).pack(side="left")
+            h_issues = hook_issues.get((h["path"], h["event"]))
+            if h_issues:
+                warn = ctk.CTkLabel(event_f, text=" ⚠", fg_color="transparent",
+                                    text_color=WARN, font=("Segoe UI", 9, "bold"))
+                warn.pack(side="left")
+                Tooltip(warn, "\n".join(h_issues))
             ctk.CTkLabel(self._agents_scroll, text=h["path"], fg_color="transparent",
                         text_color=DIM, font=("Consolas", 9), anchor="w"
                         ).grid(row=r, column=2, sticky="ew", padx=8, pady=3)

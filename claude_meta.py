@@ -186,9 +186,27 @@ def find_agent_description_issues(agents: list) -> dict:
     return issues
 
 
+def _extract_hook_commands(event_value) -> list:
+    """Pulls the actual shell command strings out of one event's hook
+    config, e.g. [{"matcher": "Bash", "hooks": [{"type": "command",
+    "command": "..."}]}]."""
+    commands = []
+    if not isinstance(event_value, list):
+        return commands
+    for group in event_value:
+        if not isinstance(group, dict):
+            continue
+        for h in group.get("hooks", []):
+            if isinstance(h, dict) and h.get("type") == "command" and h.get("command"):
+                commands.append(h["command"])
+    return commands
+
+
 def find_hooks(project_dirs: list) -> list:
-    """Returns [{"scope","scope_label","event","path"}] — one row per hook
-    event configured in the global or a project settings.json."""
+    """Returns [{"scope","scope_label","event","path","commands"}] — one row
+    per hook event configured in the global or a project settings.json.
+    "commands" is the list of shell commands actually configured for that
+    event (may be empty even if the event key exists)."""
     import json
 
     hooks = []
@@ -200,10 +218,11 @@ def find_hooks(project_dirs: list) -> list:
             data = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             return
-        for event in data.get("hooks", {}):
+        for event, value in data.get("hooks", {}).items():
             hooks.append({
                 "scope": scope, "scope_label": label,
                 "event": event, "path": str(path),
+                "commands": _extract_hook_commands(value),
             })
 
     _collect(global_claude_home() / "settings.json", "global", "Global")
@@ -214,3 +233,47 @@ def find_hooks(project_dirs: list) -> list:
         seen_dirs.add(d)
         _collect(project_settings_file(d), "project", Path(d).name or d)
     return hooks
+
+
+DANGEROUS_HOOK_PATTERNS = [
+    (re.compile(r"curl[^|]*\|\s*(sh|bash)\b"), "pipes a curl download directly into a shell"),
+    (re.compile(r"wget[^|]*\|\s*(sh|bash)\b"), "pipes a wget download directly into a shell"),
+    (re.compile(r"base64\s+(-d|--decode)\b"), "decodes a base64 payload before executing it"),
+    (re.compile(r"powershell(\.exe)?\s+.*-enc", re.IGNORECASE), "runs an encoded PowerShell command"),
+    (re.compile(r"\biex\b", re.IGNORECASE), "uses PowerShell Invoke-Expression on dynamic input"),
+]
+
+
+def find_dangerous_hook_commands(hooks: list) -> list:
+    """Flags hook commands (from find_hooks()) matching known malicious
+    patterns — the ChainDrop npm worm planted exactly this kind of
+    pipe-to-shell command in a SessionStart hook. Returns
+    [{"path","event","command","reason"}]."""
+    flagged = []
+    for h in hooks:
+        for cmd in h.get("commands", []):
+            for pattern, reason in DANGEROUS_HOOK_PATTERNS:
+                if pattern.search(cmd):
+                    flagged.append({"path": h["path"], "event": h["event"],
+                                     "command": cmd, "reason": reason})
+                    break
+    return flagged
+
+
+LOOP_RISK_EVENTS = {"Stop", "SubagentStop", "UserPromptSubmit"}
+_CLAUDE_INVOCATION_RE = re.compile(r"(^|[\s;&|])claude\b")
+
+
+def find_hook_loop_risks(hooks: list) -> list:
+    """Flags Stop/SubagentStop/UserPromptSubmit hooks whose command invokes
+    `claude` again — that invocation can itself re-trigger the same hook,
+    a documented cause of runaway loops and multi-hundred-MB log explosions.
+    Returns [{"path","event","command"}]."""
+    flagged = []
+    for h in hooks:
+        if h["event"] not in LOOP_RISK_EVENTS:
+            continue
+        for cmd in h.get("commands", []):
+            if _CLAUDE_INVOCATION_RE.search(cmd):
+                flagged.append({"path": h["path"], "event": h["event"], "command": cmd})
+    return flagged
