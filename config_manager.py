@@ -201,6 +201,38 @@ def find_gitignored_secrets(directory: str) -> list:
     return sorted(set(found))
 
 
+SECRET_ENV_KEY_RE = re.compile(r"(key|token|secret|password|passwd|credential|api_?key)", re.IGNORECASE)
+ENV_VAR_REFERENCE_RE = re.compile(r"^\$\{[A-Za-z_][A-Za-z0-9_]*\}$|^\$[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def find_mcp_exposed_secrets(mcp_config_path: str) -> list:
+    """Scans an MCP config file's mcpServers[*].env blocks for values that
+    look like hardcoded secrets rather than ${VAR}-style references to the
+    environment — a common place for API keys/tokens to leak into a file
+    that may get committed to git, since env expansion syntax is easy to
+    forget when pasting a working config. Returns
+    [{"server","env_key","file"}]. Works on .mcp.json, ~/.claude.json, or
+    claude_desktop_config.json — all use the same mcpServers/env shape."""
+    if not mcp_config_path:
+        return []
+    try:
+        data = _load(mcp_config_path)
+    except ConfigError:
+        return []
+    found = []
+    for server_name, server in data.get("mcpServers", {}).items():
+        if not isinstance(server, dict):
+            continue
+        for env_key, value in server.get("env", {}).items():
+            if not isinstance(value, str) or not value.strip():
+                continue
+            if ENV_VAR_REFERENCE_RE.match(value.strip()):
+                continue
+            if SECRET_ENV_KEY_RE.search(env_key):
+                found.append({"server": server_name, "env_key": env_key, "file": mcp_config_path})
+    return found
+
+
 def file_fingerprint(path: str) -> tuple | None:
     """(mtime_ns, size) for `path`, or None if it doesn't exist. Used to
     detect whether a config file changed on disk since ClAuSy last read it

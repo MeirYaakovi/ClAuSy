@@ -538,8 +538,15 @@ class ClausyApp:
         self._zero_deny_banner.grid(row=11, column=0, sticky="ew", pady=(10, 0))
         self._zero_deny_banner.grid_remove()
 
+        self._mcp_secrets_banner = ctk.CTkLabel(
+            wrap, text="", fg_color="#3a2a1a", text_color=WARN, corner_radius=6,
+            font=("Segoe UI", 10, "bold"), anchor="w", justify="left", wraplength=760,
+            padx=12, pady=10)
+        self._mcp_secrets_banner.grid(row=12, column=0, sticky="ew", pady=(10, 0))
+        self._mcp_secrets_banner.grid_remove()
+
         sim_f = ctk.CTkFrame(wrap, fg_color=SURF2, corner_radius=8)
-        sim_f.grid(row=12, column=0, sticky="ew", pady=(14, 0))
+        sim_f.grid(row=13, column=0, sticky="ew", pady=(14, 0))
         sim_inner = ctk.CTkFrame(sim_f, fg_color="transparent")
         sim_inner.pack(fill="x", padx=12, pady=10)
         ctk.CTkLabel(
@@ -685,6 +692,19 @@ class ClausyApp:
             self._zero_deny_banner.grid()
         else:
             self._zero_deny_banner.grid_remove()
+
+    def _check_mcp_exposed_secrets(self):
+        cd = self._cd_var.get().strip()
+        flagged = config_manager.find_mcp_exposed_secrets(cd) if cd else []
+        if flagged:
+            names = ", ".join(f"{f['server']}.{f['env_key']}" for f in flagged)
+            self._mcp_secrets_banner.configure(
+                text=f"⚠ {len(flagged)} MCP server env value(s) look like hardcoded "
+                     f"secrets instead of ${{VAR}} references — {names}. If this file "
+                     f"is ever committed to git, those values leak.")
+            self._mcp_secrets_banner.grid()
+        else:
+            self._mcp_secrets_banner.grid_remove()
 
     # ── Directories tab ───────────────────────────────────────────────────────
 
@@ -1081,6 +1101,7 @@ class ClausyApp:
         self._check_unsafe_bash_wildcards()
         self._check_tracked_settings_local()
         self._check_zero_deny_bypass_combo()
+        self._check_mcp_exposed_secrets()
         self._refresh_cd_candidates()
 
     # ── entry management ─────────────────────────────────────────────────────

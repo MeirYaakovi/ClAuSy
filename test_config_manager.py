@@ -740,6 +740,53 @@ class TestFindGitignoredSecrets(unittest.TestCase):
             config_manager.find_gitignored_secrets(os.path.join(self.tmp, "nope")), [])
 
 
+class TestFindMcpExposedSecrets(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def _write(self, data):
+        p = os.path.join(self.tmp, "mcp.json")
+        with open(p, "w", encoding="utf-8") as f:
+            json.dump(data, f)
+        return p
+
+    def test_blank_path_returns_empty(self):
+        self.assertEqual(config_manager.find_mcp_exposed_secrets(""), [])
+
+    def test_hardcoded_api_key_flagged(self):
+        p = self._write({"mcpServers": {"github": {"env": {"API_KEY": "ghp_abc123realvalue"}}}})
+        result = config_manager.find_mcp_exposed_secrets(p)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["server"], "github")
+        self.assertEqual(result[0]["env_key"], "API_KEY")
+
+    def test_var_reference_form_not_flagged(self):
+        p = self._write({"mcpServers": {"github": {"env": {"API_KEY": "${GITHUB_TOKEN}"}}}})
+        self.assertEqual(config_manager.find_mcp_exposed_secrets(p), [])
+
+    def test_bare_var_reference_not_flagged(self):
+        p = self._write({"mcpServers": {"github": {"env": {"API_KEY": "$GITHUB_TOKEN"}}}})
+        self.assertEqual(config_manager.find_mcp_exposed_secrets(p), [])
+
+    def test_non_secret_key_name_not_flagged(self):
+        p = self._write({"mcpServers": {"fs": {"env": {"LOG_LEVEL": "debug"}}}})
+        self.assertEqual(config_manager.find_mcp_exposed_secrets(p), [])
+
+    def test_empty_value_not_flagged(self):
+        p = self._write({"mcpServers": {"github": {"env": {"API_KEY": ""}}}})
+        self.assertEqual(config_manager.find_mcp_exposed_secrets(p), [])
+
+    def test_no_env_block_not_flagged(self):
+        p = self._write({"mcpServers": {"github": {"command": "npx"}}})
+        self.assertEqual(config_manager.find_mcp_exposed_secrets(p), [])
+
+    def test_corrupt_file_returns_empty(self):
+        p = os.path.join(self.tmp, "bad.json")
+        with open(p, "w") as f:
+            f.write("{broken")
+        self.assertEqual(config_manager.find_mcp_exposed_secrets(p), [])
+
+
 class TestGetPermissionRules(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
