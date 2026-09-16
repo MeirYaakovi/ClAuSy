@@ -17,6 +17,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - "Find Ignored Secrets" — scan tracked directories for secret-looking files (.env, *.pem, *.key, credentials.json, ...) that are excluded from git via .gitignore but still readable by Claude
 - Permission rule simulator in Settings — test a command/path against current allow/deny rules and see exactly which one matches
 - Warn when a granted directory is a sensitive system/credential path (System32, /etc, ~/.ssh, ~/.aws, ...)
+- Flag Bash allow rules using a bare '*' wildcard instead of the safer ':*' prefix form
+- Warn when Bash/Read/Edit-style rules (not directories) disappear from settings.json due to an external rewrite
+- Flag hooks that run destructive shell commands (rm -rf, git push --force, etc.)
+- Warn when .claude/settings.local.json is accidentally committed to git instead of gitignored
+- Git Push tab: warn when local history looks amended/rebased since the last known push
+- "Show effective permissions" on a directory row — merges global, project-level, and Claude Desktop permission signals into one ALLOW/DENY/ASK verdict
+
+### Fixed
+- Corrected 3 feature-tracking entries (backup restore, permission-conflict detector, on-write conflict detection) that were already shipped in earlier rounds but never marked Done
 - Remember window size and maximized state between launches
 - Warn when a CLAUDE.md file's Hebrew content isn't on the first line, so Obsidian can auto-detect RTL
 - Word/line count and a "too long" warning on CLAUDE.md files (based on line count, ~150 lines — matches Claude's actual attention drop-off, not a word count)

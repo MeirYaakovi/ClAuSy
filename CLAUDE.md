@@ -13,7 +13,7 @@
   - DirectoryRow — שורת תיקייה עם checkbox, label, path, 3 toggles
     - סימון ⚠ אם התיקייה כבר לא קיימת בדיסק (ויש לה הרשאה פעילה)
     - סימון ⚠ אם התיקייה חופפת לתיקייה אחרת ברשימה (אחת הורה של השנייה)
-    - תפריט קליק ימני: Open / Copy path / Remove
+    - תפריט קליק ימני: Open / Copy path / Show effective permissions / Remove
   - List view + Thumbnail view
   - תיבת חיפוש חופשית (מסננת לפי label או path, גם ב-list וגם ב-thumbnail)
   - Legend מתקפל/נפתח (עם שמירת מצב)
@@ -41,6 +41,7 @@
     - badge "⚠ direct on main" אם יש קומיטים לא-דחופים ישירות על main/master
     - badge "⇕ N behind" + אזהרה בדיאלוג ה-push אם הריפו התפצל מה-remote (push רגיל צפוי להידחות; ClAuSy לעולם לא עושה force-push)
     - badge "🌿 new branch" אם ה-branch הנוכחי לא נראה בסריקה קודמת (נשמר ב-storage.py)
+    - badge "⚠ history rewritten" + אזהרה בדיאלוג ה-push אם ה-HEAD הקודם שנשמר כבר לא ancestor של ה-HEAD הנוכחי (amend/rebase)
     - תצוגת הקומיטים הלא-דחופים האחרונים (hash + הודעה), tooltip לרשימה המלאה
     - checkbox לכל ריפו + "☑ Select Unpushed" / "☐ Select None" + כפתור "⬆ Push Selected" (עם דיאלוג אישור לפני push בפועל, כי זו פעולה שמשפיעה על remote)
     - כפתור "Push" בודד לכל שורה, וכפתור "Open" לפתיחת התיקייה
@@ -50,13 +51,19 @@
   - כפתור "🔍 Find Ignored Secrets" — סורק קבצי סוד (.env/*.pem/*.key/credentials.json) שמוסתרים ב-.gitignore אבל עדיין קריאים ל-Claude
   - Permission rule simulator בSettings — מקלידים command/path ורואים איזה allow/deny rule תואם ומה הverdict
   - סימון ⚠ בDirectories אם התיקייה נראית כמו נתיב מערכת/credentials רגיש (System32, /etc, ~/.ssh, ~/.aws...)
+  - באנר אזהרה על Bash allow rules עם bare wildcard `*` (במקום `:*` הבטוח) — יכול להתאים לתווי shell כמו `; && |`
+  - דיאלוג "השתנה חיצונית" משודרג — מזהיר במפורש אם rules (לא תיקיות) נעלמו מ-settings.json
+  - באנר אזהרה אם settings.local.json נמצא tracked בgit במקום gitignored (בדיקה ישירה מול `git ls-files`)
+  - "Show effective permissions" בתפריט קליק ימני — ממזג global settings.json + project-level .claude/settings.json + Claude Desktop לverdict אחד (ALLOW/DENY/ASK)
 - `claude_meta.py` — סריקה טהורה (ללא side-effects) של CLAUDE.md / subagents / hooks
   - `find_claude_md_files()`, `find_agents()`, `find_hooks()` (כולל `commands` בפועל לכל hook)
   - `check_rtl_first_line()`, `claude_md_stats()`, `find_agent_description_issues()`
-  - `find_dangerous_hook_commands()` — תבניות זדוניות ידועות (curl|sh, base64 -d, PowerShell מקודד)
+  - `find_dangerous_hook_commands()` — תבניות זדוניות/הרסניות ידועות (curl|sh, base64 -d, PowerShell מקודד, rm -rf, git push --force)
   - `find_hook_loop_risks()` — hooks על Stop/SubagentStop/UserPromptSubmit שקוראים ל-`claude` שוב
 - `git_status.py` — סריקת ריפוזיטוריז גיט וסטטוס push (ללא side-effects חוץ מ-`push_repo()`)
-  - `find_git_repos()`, `get_repo_status()` (כולל `direct_on_main`, `behind`), `scan()`, `push_repo()`
+  - `find_git_repos()`, `get_repo_status()` (כולל `direct_on_main`, `behind`, `head_sha`), `scan()`, `push_repo()`
+  - `is_ancestor()` — לזיהוי amend/rebase מול ה-HEAD הידוע האחרון
+  - `is_path_tracked()`, `find_tracked_settings_local()` — settings.local.json שנכנס לgit בטעות
 - `config_manager.py` — קריאה/כתיבה בטוחה לקבצי Claude
   - `ConfigError` — exception ל-JSON פגום
   - `validate_path()` — בדיקת קובץ לפני שימוש
@@ -72,10 +79,12 @@
   - `find_gitignored_secrets()` — קבצי סוד שמוסתרים ב-.gitignore
   - `get_permission_rules()`, `simulate_permission()` — סימולטור חוקי הרשאה (תומך בתחביר `:*` של Bash)
   - `is_sensitive_system_path()` — זיהוי נתיבי מערכת/credentials רגישים
-- `storage.py` — שמירת העדפות UI ב-`~/.clauSy/settings.json` (כולל גודל/מצב חלון, מצב legend, branches ידועים לכל ריפו, מתי הופעל YOLO mode)
+  - `count_non_path_rules()`, `find_unsafe_bash_wildcards()` — bare `*` בBash allow rules
+  - `get_effective_permissions()` — מיזוג global + project-level + Claude Desktop לverdict אחד
+- `storage.py` — שמירת העדפות UI ב-`~/.clauSy/settings.json` (כולל גודל/מצב חלון, מצב legend, branches ידועים לכל ריפו, HEAD sha אחרון לכל ריפו, מתי הופעל YOLO mode)
 
 ### בדיקות
-- `test_config_manager.py` + `test_claude_meta.py` + `test_git_status.py` + `test_storage.py` — 157 unit tests, כולם עוברים (`python -m pytest`)
+- `test_config_manager.py` + `test_claude_meta.py` + `test_git_status.py` + `test_storage.py` — 189 unit tests, כולם עוברים (`python -m pytest`)
 
 ### GitHub
 - ריפו: https://github.com/MeirYaakovi/ClAuSy
@@ -113,7 +122,8 @@
   - #1-100: רעיונות מקוריים
   - #101-130: 30 רעיונות מבוססי מחקר ברשת (GitHub issues אמיתיים, תקרית YOLO-mode מתועדת, docs רשמיים)
   - #131-160: 30 רעיונות סבב 3 (GitHub issues אמיתיים על permission precedence, wildcard matching, hook loops, ChainDrop npm worm, force-push incidents, plugin marketplaces)
-- 31 רעיונות שסומנו Done: #5, #6, #8, #10, #14, #18, #19, #51, #53, #79, #99, #101, #102, #103, #106, #109, #111, #113, #119, #122, #130, #131, #137, #143, #144, #147, #149, #153, #157, #159, #160
+- 42 רעיונות שסומנו Done: #5, #6, #8, #10, #14, #17, #18, #19, #30, #51, #53, #79, #99, #101, #102, #103, #104, #105, #106, #107, #109, #111, #113, #116, #119, #122, #123, #130, #131, #132, #134, #135, #137, #143, #144, #147, #148, #149, #153, #157, #159, #160
+  - #17, #30, #104 התגלו כבר-implemented מסבבים קודמים ולא סומנו — תוקן בסבב 4
 - `CHANGELOG.md` — מתעד את כל הפיצ'רים לפי גרסה (Keep a Changelog format)
 
 ---
