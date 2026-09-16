@@ -6,7 +6,7 @@
 
 ### אפליקציה
 - `main.py` — נקודת כניסה, פותח חלון CustomTkinter (זוכר גודל/מקסום אחרון)
-- `app.py` — ממשק גרפי מלא: Settings / Directories / CLAUDE.md Map / Agents & Routines / Explained
+- `app.py` — ממשק גרפי מלא: Settings / Directories / CLAUDE.md Map / Agents & Routines / Git Push / Explained
   - ממשק הועבר ל-CustomTkinter (במקום Tkinter רגיל) — פלטת צבעים כהה (BG, SURF, SURF2, SURF3, WARN)
   - ToggleCircle — עיגול לחיץ לכל מקור הרשאה
   - ScrollableFrame — רשימה גלילה
@@ -36,9 +36,17 @@
     - ספירת מילים/שורות + אזהרת "ארוך מדי" (מבוסס על ~150 שורות, לא מילים — תואם את התנהגות Claude בפועל)
   - Agents & Routines tab — subagents ו-hooks מכל הפרויקטים העוקבים
     - סימון ⚠ ל-subagent עם description חסר/קצר מדי/זהה לאחר
+  - Git Push tab — סורק כל תיקייה עוקבת (ותת-תיקיות ישירות שלה) לריפוזיטוריז גיט
+    - סטטוס לכל ריפו: branch, badge אדום "⬆ N unpushed" / ירוק "✔ pushed" / "no upstream", badge כתום למספר שינויים לא שמורים (uncommitted)
+    - תצוגת הקומיטים הלא-דחופים האחרונים (hash + הודעה), tooltip לרשימה המלאה
+    - checkbox לכל ריפו + "☑ Select Unpushed" / "☐ Select None" + כפתור "⬆ Push Selected" (עם דיאלוג אישור לפני push בפועל, כי זו פעולה שמשפיעה על remote)
+    - כפתור "Push" בודד לכל שורה, וכפתור "Open" לפתיחת התיקייה
+    - הריצה (סריקה + push) על thread נפרד כדי לא לתקוע את הממשק, עם progress bar וסטטוס לכל שורה
 - `claude_meta.py` — סריקה טהורה (ללא side-effects) של CLAUDE.md / subagents / hooks
   - `find_claude_md_files()`, `find_agents()`, `find_hooks()`
   - `check_rtl_first_line()`, `claude_md_stats()`, `find_agent_description_issues()`
+- `git_status.py` — סריקת ריפוזיטוריז גיט וסטטוס push (ללא side-effects חוץ מ-`push_repo()`)
+  - `find_git_repos()`, `get_repo_status()`, `scan()`, `push_repo()`
 - `config_manager.py` — קריאה/כתיבה בטוחה לקבצי Claude
   - `ConfigError` — exception ל-JSON פגום
   - `validate_path()` — בדיקת קובץ לפני שימוש

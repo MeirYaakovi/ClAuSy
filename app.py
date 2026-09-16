@@ -13,6 +13,7 @@ import customtkinter as ctk
 
 import claude_meta
 import config_manager
+import git_status
 import storage
 
 ctk.set_appearance_mode("dark")
@@ -380,16 +381,18 @@ class ClausyApp:
         self._tab_dirs     = self.nb.add("Directories")
         self._tab_claudemd = self.nb.add("CLAUDE.md Map")
         self._tab_agents   = self.nb.add("Agents & Routines")
+        self._tab_gitpush  = self.nb.add("Git Push")
         self._tab_explain  = self.nb.add("Explained")
 
         for t in (self._tab_settings, self._tab_dirs, self._tab_claudemd,
-                  self._tab_agents, self._tab_explain):
+                  self._tab_agents, self._tab_gitpush, self._tab_explain):
             t.configure(fg_color=BG)
 
         self._build_settings_tab(self._tab_settings)
         self._build_dirs_tab(self._tab_dirs)
         self._build_claudemd_tab(self._tab_claudemd)
         self._build_agents_tab(self._tab_agents)
+        self._build_gitpush_tab(self._tab_gitpush)
         self._build_explain_tab(self._tab_explain)
 
     def _on_tab_changed(self):
@@ -398,6 +401,8 @@ class ClausyApp:
             self._refresh_claudemd_tab()
         elif name == "Agents & Routines":
             self._refresh_agents_tab()
+        elif name == "Git Push":
+            self._refresh_gitpush_tab()
 
     def _on_close(self):
         if self._pending:
@@ -1491,6 +1496,289 @@ class ClausyApp:
                          command=lambda p=h["path"]: _open_path(p)
                          ).grid(row=r, column=3, pady=3)
             r += 1
+
+    # ── Git Push tab ──────────────────────────────────────────────────────────
+
+    def _build_gitpush_tab(self, parent):
+        self._git_repos: list = []
+        self._git_vars: dict = {}      # path -> tk.BooleanVar
+        self._git_row_ui: dict = {}    # path -> {"push_btn", "status_lbl"}
+        self._git_busy = False
+
+        top = ctk.CTkFrame(parent, fg_color="transparent")
+        top.pack(fill="x", padx=20, pady=(16, 4))
+        ctk.CTkLabel(top, text="Repos with commits waiting to be pushed",
+                    fg_color="transparent", text_color=TEXT,
+                    font=("Segoe UI", 14, "bold")).pack(side="left")
+        self._git_refresh_btn = ctk.CTkButton(
+            top, text="↻ Refresh", fg_color=SURF3, hover_color=ACCENT,
+            text_color=TEXT, width=90, height=28, command=self._refresh_gitpush_tab)
+        self._git_refresh_btn.pack(side="right")
+
+        self._git_summary_lbl = ctk.CTkLabel(
+            top, text="", fg_color="transparent", text_color=DIM, font=("Segoe UI", 10))
+        self._git_summary_lbl.pack(side="right", padx=(0, 16))
+
+        toolbar = ctk.CTkFrame(parent, fg_color=SURF2, corner_radius=0)
+        toolbar.pack(fill="x", padx=16, pady=(4, 0))
+        tinner = ctk.CTkFrame(toolbar, fg_color="transparent")
+        tinner.pack(fill="x", padx=8, pady=6)
+
+        def tbtn(text, cmd):
+            b = ctk.CTkButton(tinner, text=text, fg_color=SURF3, hover_color=ACCENT,
+                              text_color=TEXT, height=28, font=("Segoe UI", 10),
+                              command=cmd)
+            b.pack(side="left", padx=4)
+            return b
+
+        tbtn("☑ Select Unpushed", lambda: self._git_select("unpushed"))
+        tbtn("☐ Select None", lambda: self._git_select("none"))
+
+        self._git_scroll = ctk.CTkScrollableFrame(
+            parent, fg_color=BG, scrollbar_fg_color=BG,
+            scrollbar_button_color=SURF3, scrollbar_button_hover_color=ACCENT)
+        self._git_scroll.pack(fill="both", expand=True, padx=16, pady=(8, 0))
+        self._git_scroll.grid_columnconfigure(2, weight=1)
+
+        footer = ctk.CTkFrame(parent, fg_color=SURF2, corner_radius=0)
+        footer.pack(fill="x", side="bottom", padx=0, pady=0)
+        footer_inner = ctk.CTkFrame(footer, fg_color="transparent")
+        footer_inner.pack(fill="x", padx=14, pady=8)
+
+        self._git_push_btn = ctk.CTkButton(
+            footer_inner, text="⬆ Push Selected", fg_color=ACCENT, hover_color=ACC2,
+            text_color="white", height=34, font=("Segoe UI", 11, "bold"),
+            command=self._push_selected)
+        self._git_push_btn.pack(side="left")
+
+        self._git_prog_bar = ctk.CTkProgressBar(footer_inner, progress_color=ACCENT,
+                                                 fg_color=SURF3)
+        self._git_prog_bar.set(0)
+        self._git_prog_bar.pack(side="left", fill="x", expand=True, padx=14)
+
+        self._git_status_lbl = ctk.CTkLabel(footer_inner, text="", fg_color="transparent",
+                                            text_color=DIM, font=("Segoe UI", 10), width=220,
+                                            anchor="e")
+        self._git_status_lbl.pack(side="right")
+
+        ctk.CTkLabel(
+            parent, fg_color="transparent", text_color=OFF_TXT, anchor="w",
+            font=("Segoe UI", 9),
+            text=("Scans the immediate subfolders of every tracked directory "
+                  "(Directories tab) for git repos with an upstream remote.")
+        ).pack(fill="x", padx=20, pady=(2, 10), side="bottom")
+
+    def _git_select(self, mode: str):
+        for repo in self._git_repos:
+            if mode == "none":
+                self._git_vars[repo["path"]].set(False)
+            elif mode == "unpushed":
+                self._git_vars[repo["path"]].set(repo["ahead"] > 0 and not repo["error"])
+
+    def _refresh_gitpush_tab(self):
+        if self._git_busy:
+            return
+        self._set_git_busy(True, "Scanning…")
+        for w in self._git_scroll.winfo_children():
+            w.destroy()
+        self._git_row_ui = {}
+        ctk.CTkLabel(self._git_scroll, text="Scanning repos…", fg_color="transparent",
+                    text_color=DIM, font=("Segoe UI", 10)).grid(row=0, column=0, sticky="w")
+
+        project_dirs = self._project_dirs()
+
+        def worker():
+            repos = git_status.scan(project_dirs)
+            self.root.after(0, self._on_gitpush_scanned, repos)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_gitpush_scanned(self, repos: list):
+        self._git_repos = repos
+        self._git_vars = {r["path"]: tk.BooleanVar(value=False) for r in repos}
+        self._set_git_busy(False, "")
+        self._render_gitpush_rows()
+
+    def _set_git_busy(self, busy: bool, status: str):
+        self._git_busy = busy
+        state = "disabled" if busy else "normal"
+        self._git_refresh_btn.configure(state=state)
+        self._git_push_btn.configure(state=state)
+        self._git_status_lbl.configure(text=status)
+
+    def _render_gitpush_rows(self):
+        for w in self._git_scroll.winfo_children():
+            w.destroy()
+        self._git_row_ui = {}
+
+        unpushed = [r for r in self._git_repos if r["ahead"] > 0]
+        dirty = [r for r in self._git_repos if r["dirty_count"] > 0]
+        self._git_summary_lbl.configure(
+            text=f"{len(self._git_repos)} repos · {len(unpushed)} with unpushed commits "
+                 f"· {len(dirty)} with uncommitted changes")
+
+        if not self._git_repos:
+            ctk.CTkLabel(self._git_scroll, text="No git repos found under the tracked "
+                        "directories (see Directories tab).", fg_color="transparent",
+                        text_color=OFF_TXT, font=("Segoe UI", 10)
+                        ).grid(row=0, column=0, columnspan=4, sticky="w", pady=8)
+            return
+
+        for r, repo in enumerate(self._git_repos):
+            self._gitpush_row(self._git_scroll, r * 2, repo)
+
+    def _gitpush_row(self, parent, row, repo):
+        path = repo["path"]
+
+        cb = ctk.CTkCheckBox(parent, text="", variable=self._git_vars[path], width=20,
+                             fg_color=ACCENT, hover_color=ACC2, checkmark_color="white")
+        cb.grid(row=row, column=0, padx=(4, 8), pady=8, sticky="n")
+        if repo["error"] or repo["ahead"] == 0:
+            cb.configure(state="disabled")
+
+        name_f = ctk.CTkFrame(parent, fg_color="transparent")
+        name_f.grid(row=row, column=1, sticky="nw", pady=8, padx=(0, 8))
+        ctk.CTkLabel(name_f, text=repo["name"], fg_color="transparent", text_color=TEXT,
+                    font=("Segoe UI", 11, "bold"), anchor="w").pack(anchor="w")
+        ctk.CTkLabel(name_f, text=repo["branch"] or "—", fg_color="transparent",
+                    text_color=DIM, font=("Consolas", 9), anchor="w").pack(anchor="w")
+
+        mid_f = ctk.CTkFrame(parent, fg_color="transparent")
+        mid_f.grid(row=row, column=2, sticky="ew", pady=8, padx=(0, 8))
+
+        badges = ctk.CTkFrame(mid_f, fg_color="transparent")
+        badges.pack(anchor="w", fill="x")
+
+        if repo["error"]:
+            ctk.CTkLabel(badges, text=f"⚠ {repo['error']}", fg_color="transparent",
+                        text_color=CC_R, font=("Segoe UI", 9, "bold")).pack(side="left")
+        else:
+            if not repo["has_upstream"]:
+                self._git_badge(badges, "no upstream", OFF_TXT)
+            elif repo["ahead"] > 0:
+                self._git_badge(badges, f"⬆ {repo['ahead']} unpushed", CC_R)
+            else:
+                self._git_badge(badges, "✔ pushed", CC_G)
+            if repo["dirty_count"] > 0:
+                self._git_badge(badges, f"● {repo['dirty_count']} uncommitted", WARN)
+
+        if repo["unpushed_commits"]:
+            latest = repo["unpushed_commits"][0]
+            commit_txt = f"{latest['hash']}  {latest['subject']}"
+            if len(repo["unpushed_commits"]) > 1:
+                commit_txt += f"   (+{len(repo['unpushed_commits']) - 1} more)"
+            lbl = ctk.CTkLabel(mid_f, text=commit_txt, fg_color="transparent", text_color=DIM,
+                              font=("Consolas", 9), anchor="w", justify="left", wraplength=420)
+            lbl.pack(anchor="w", pady=(4, 0))
+            if len(repo["unpushed_commits"]) > 1:
+                full = "\n".join(f"{c['hash']}  {c['subject']}  ({c['date']})"
+                                 for c in repo["unpushed_commits"])
+                Tooltip(lbl, full)
+
+        status_lbl = ctk.CTkLabel(mid_f, text="", fg_color="transparent",
+                                  text_color=DIM, font=("Segoe UI", 9), anchor="w")
+        status_lbl.pack(anchor="w", pady=(4, 0))
+
+        btn_f = ctk.CTkFrame(parent, fg_color="transparent")
+        btn_f.grid(row=row, column=3, padx=(8, 4), pady=8, sticky="ne")
+        ctk.CTkButton(btn_f, text="Open", width=64, height=26, fg_color=SURF3,
+                     hover_color=ACCENT, text_color=TEXT,
+                     command=lambda p=path: _open_path(p)).pack(side="left", padx=2)
+        can_push = not repo["error"] and repo["has_upstream"] and repo["ahead"] > 0
+        push_btn = ctk.CTkButton(
+            btn_f, text="Push", width=64, height=26,
+            fg_color=(ACCENT if can_push else SURF3),
+            hover_color=(ACC2 if can_push else SURF3),
+            text_color=(TEXT if can_push else OFF_TXT),
+            state=("normal" if can_push else "disabled"),
+            command=lambda p=path, n=repo["name"]: self._push_paths([p], [n]))
+        push_btn.pack(side="left", padx=2)
+
+        self._git_row_ui[path] = {"push_btn": push_btn, "status_lbl": status_lbl}
+
+        sep = ctk.CTkFrame(parent, fg_color=OFF, height=1)
+        sep.grid(row=row + 1, column=0, columnspan=4, sticky="ew", pady=(0, 2))
+
+    def _git_badge(self, parent, text, color):
+        ctk.CTkLabel(parent, text=text, fg_color=color, text_color="white", corner_radius=10,
+                    font=("Segoe UI", 9, "bold"), height=20, padx=8
+                    ).pack(side="left", padx=(0, 6))
+
+    def _push_selected(self):
+        selected = [(p, r["name"]) for p, v in self._git_vars.items() if v.get()
+                    for r in self._git_repos if r["path"] == p]
+        if not selected:
+            messagebox.showinfo("ClAuSy", "No repos selected.\nCheck the box next to any "
+                                "repo with unpushed commits, or use \"Select Unpushed\".")
+            return
+        paths = [p for p, _ in selected]
+        names = [n for _, n in selected]
+        self._push_paths(paths, names)
+
+    def _push_paths(self, paths: list, names: list):
+        if self._git_busy:
+            return
+        if not messagebox.askyesno(
+            "ClAuSy — Push to remote",
+            f"This will run 'git push' for {len(paths)} repo(s):\n\n" +
+            "\n".join(f"  • {n}" for n in names) +
+            "\n\nThis pushes to the remote (GitHub) and is visible to anyone with "
+            "access to it. Continue?"
+        ):
+            return
+
+        self._set_git_busy(True, "Pushing…")
+        self._git_prog_bar.set(0)
+        for p in paths:
+            ui = self._git_row_ui.get(p)
+            if ui:
+                ui["status_lbl"].configure(text="Queued…", text_color=DIM)
+
+        def worker():
+            total = len(paths)
+            failures = []
+            for i, p in enumerate(paths):
+                name = next((n for pp, n in zip(paths, names) if pp == p), p)
+                self.root.after(0, self._on_git_push_progress, p, name, i, total)
+                result = git_status.push_repo(p)
+                self.root.after(0, self._on_git_push_result, p, name, result)
+                if not result["ok"]:
+                    failures.append(name)
+            self.root.after(0, self._on_git_push_done, total, failures)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_git_push_progress(self, path, name, index, total):
+        self._git_status_lbl.configure(text=f"Pushing {name}… ({index + 1}/{total})")
+        self._git_prog_bar.set(index / total)
+        ui = self._git_row_ui.get(path)
+        if ui:
+            ui["status_lbl"].configure(text="Pushing…", text_color=DIM)
+
+    def _on_git_push_result(self, path, name, result):
+        ui = self._git_row_ui.get(path)
+        if not ui:
+            return
+        if result["ok"]:
+            ui["status_lbl"].configure(text="Pushed ✓", text_color=CC_G)
+        else:
+            ui["status_lbl"].configure(text="Push failed", text_color=CC_R)
+            first_line = (result["output"].splitlines() or [""])[0]
+            Tooltip(ui["status_lbl"], result["output"] or "Unknown error")
+            if first_line:
+                ui["status_lbl"].configure(text=f"Push failed — {first_line[:60]}",
+                                           text_color=CC_R)
+
+    def _on_git_push_done(self, total, failures):
+        self._git_prog_bar.set(1)
+        if failures:
+            self._git_status_lbl.configure(
+                text=f"{total - len(failures)}/{total} pushed, {len(failures)} failed",
+                text_color=CC_R)
+        else:
+            self._git_status_lbl.configure(text=f"All {total} pushed ✓", text_color=CC_G)
+        self._set_git_busy(False, self._git_status_lbl.cget("text"))
+        self.root.after(3000, self._refresh_gitpush_tab)
 
     # ── Explained tab ─────────────────────────────────────────────────────────
 
