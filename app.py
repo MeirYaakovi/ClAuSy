@@ -497,7 +497,9 @@ class ClausyApp:
         btn(btn_f, "🔍 Find Ignored Secrets",
             self._scan_gitignored_secrets                     ).pack(side="left", padx=(0, 10))
         btn(btn_f, "🐞 Report Confusing Config",
-            lambda: webbrowser.open(REPORT_ISSUE_URL)          ).pack(side="left")
+            lambda: webbrowser.open(REPORT_ISSUE_URL)          ).pack(side="left", padx=(0, 10))
+        btn(btn_f, "📋 Copy Diagnostics",
+            self._copy_diagnostics                             ).pack(side="left")
 
         self._status_lbl = ctk.CTkLabel(wrap, text="", fg_color="transparent",
                                         text_color=DIM, font=("Segoe UI", 10), anchor="w")
@@ -1010,6 +1012,13 @@ class ClausyApp:
             self._set_status(f"Added {added} deny rule(s) for secret files.", CC_G)
         else:
             self._set_status("All secret-file deny rules were already present.", DIM)
+
+    def _copy_diagnostics(self):
+        summary = config_manager.build_diagnostics_summary(
+            self._cc_var.get().strip(), self._cd_var.get().strip())
+        self.root.clipboard_clear()
+        self.root.clipboard_append(summary)
+        self._set_status("Diagnostics copied to clipboard — paste into a GitHub issue.", CC_G)
 
     def _run_permission_simulator(self):
         target = self._sim_var.get().strip()

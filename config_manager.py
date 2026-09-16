@@ -233,6 +233,55 @@ def find_mcp_exposed_secrets(mcp_config_path: str) -> list:
     return found
 
 
+def build_diagnostics_summary(cc_settings: str, cd_config: str) -> str:
+    """Builds a redacted plain-text summary suitable for pasting into a
+    GitHub issue — permission mode, which config files exist and their
+    sizes (not their content), MCP server names only, and hook event names
+    with a command count only (never the command text itself, which could
+    contain local paths or, per find_mcp_exposed_secrets, secrets). This is
+    the same information ClAuSy itself already inspects, just packaged for
+    a human to hand to a bug report instead of re-typing it by hand."""
+    lines = ["ClAuSy diagnostics", "=" * 18, ""]
+
+    mode = get_permission_mode(cc_settings) if cc_settings else None
+    lines.append(f"Permission mode: {mode or '(default)'}")
+    lines.append("")
+
+    for label, path in (("Claude Code settings.json", cc_settings),
+                         ("Claude Desktop config", cd_config)):
+        if not path:
+            lines.append(f"{label}: (not set)")
+            continue
+        fp = file_fingerprint(path)
+        lines.append(f"{label}: {'present' if fp else 'missing'}"
+                     f"{f', {fp[1]} bytes' if fp else ''}")
+    lines.append("")
+
+    try:
+        cc_data = _load(cc_settings) if cc_settings else {}
+    except ConfigError:
+        cc_data = {}
+    hooks = cc_data.get("hooks", {})
+    if hooks:
+        lines.append("Hooks configured (event: command count):")
+        for event, value in hooks.items():
+            count = sum(len(g.get("hooks", [])) for g in value if isinstance(g, dict)) \
+                if isinstance(value, list) else 0
+            lines.append(f"  {event}: {count}")
+    else:
+        lines.append("Hooks configured: none")
+    lines.append("")
+
+    try:
+        cd_data = _load(cd_config) if cd_config else {}
+    except ConfigError:
+        cd_data = {}
+    servers = list(cd_data.get("mcpServers", {}).keys())
+    lines.append(f"MCP servers: {', '.join(servers) if servers else 'none'}")
+
+    return "\n".join(lines)
+
+
 def file_fingerprint(path: str) -> tuple | None:
     """(mtime_ns, size) for `path`, or None if it doesn't exist. Used to
     detect whether a config file changed on disk since ClAuSy last read it

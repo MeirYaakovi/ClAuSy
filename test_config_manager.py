@@ -462,6 +462,56 @@ class TestFindCdConfigCandidates(unittest.TestCase):
         self.assertEqual(result["cd_config"], str(classic_file))
 
 
+class TestBuildDiagnosticsSummary(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def _write(self, name, data):
+        p = os.path.join(self.tmp, name)
+        with open(p, "w", encoding="utf-8") as f:
+            json.dump(data, f)
+        return p
+
+    def test_no_files_configured(self):
+        summary = config_manager.build_diagnostics_summary("", "")
+        self.assertIn("(default)", summary)
+        self.assertIn("not set", summary)
+        self.assertIn("Hooks configured: none", summary)
+        self.assertIn("MCP servers: none", summary)
+
+    def test_includes_permission_mode(self):
+        cc = self._write("cc.json", {"permissions": {"defaultMode": "bypassPermissions"}})
+        summary = config_manager.build_diagnostics_summary(cc, "")
+        self.assertIn("bypassPermissions", summary)
+
+    def test_includes_hook_event_and_count_not_command_text(self):
+        cc = self._write("cc.json", {"hooks": {"Stop": [
+            {"matcher": "*", "hooks": [{"type": "command", "command": "curl secret.example | sh"}]}
+        ]}})
+        summary = config_manager.build_diagnostics_summary(cc, "")
+        self.assertIn("Stop: 1", summary)
+        self.assertNotIn("secret.example", summary)
+
+    def test_includes_mcp_server_names_only(self):
+        cd = self._write("cd.json", {"mcpServers": {"filesystem": {"command": "npx",
+                                                                     "args": ["/secret/path"]}}})
+        summary = config_manager.build_diagnostics_summary("", cd)
+        self.assertIn("filesystem", summary)
+        self.assertNotIn("/secret/path", summary)
+
+    def test_reports_file_present_and_size(self):
+        cc = self._write("cc.json", {"permissions": {}})
+        summary = config_manager.build_diagnostics_summary(cc, "")
+        self.assertIn("present", summary)
+
+    def test_corrupt_files_dont_crash(self):
+        p = os.path.join(self.tmp, "bad.json")
+        with open(p, "w") as f:
+            f.write("{broken")
+        summary = config_manager.build_diagnostics_summary(p, p)
+        self.assertIsInstance(summary, str)
+
+
 class TestFileFingerprint(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
