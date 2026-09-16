@@ -3,9 +3,20 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased] - 2026-09-14
+## [Unreleased] - 2026-09-16
 
 ### Added
+- Git Push tab: scans tracked directories for git repos with unpushed commits, shows branch/upstream/dirty status, and pushes one or many repos at once (with a confirmation dialog)
+- Git Push tab: flag repos with unpushed commits sitting directly on main/master instead of a feature branch
+- Git Push tab: warn when a repo has diverged from its remote (push would likely be rejected as non-fast-forward) — ClAuSy never force-pushes
+- Git Push tab: flag repos that changed to a branch not seen on a previous scan
+- Warn about settings.json top-level keys ClAuSy doesn't recognize (possible typo or renamed/removed setting)
+- Scan hooks for known-malicious command patterns (curl/wget piped to a shell, base64-decode-then-exec, encoded PowerShell)
+- Scan Stop/SubagentStop/UserPromptSubmit hooks that re-invoke `claude`, a documented cause of runaway loops
+- Show how long "YOLO mode" (bypassPermissions) has been enabled, not just that it's on
+- "Find Ignored Secrets" — scan tracked directories for secret-looking files (.env, *.pem, *.key, credentials.json, ...) that are excluded from git via .gitignore but still readable by Claude
+- Permission rule simulator in Settings — test a command/path against current allow/deny rules and see exactly which one matches
+- Warn when a granted directory is a sensitive system/credential path (System32, /etc, ~/.ssh, ~/.aws, ...)
 - Remember window size and maximized state between launches
 - Warn when a CLAUDE.md file's Hebrew content isn't on the first line, so Obsidian can auto-detect RTL
 - Word/line count and a "too long" warning on CLAUDE.md files (based on line count, ~150 lines — matches Claude's actual attention drop-off, not a word count)
