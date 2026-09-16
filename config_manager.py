@@ -213,6 +213,51 @@ def file_fingerprint(path: str) -> tuple | None:
     return (st.st_mtime_ns, st.st_size)
 
 
+def count_non_path_rules(cc_settings: str) -> dict:
+    """Returns {"allow": n, "deny": n} — counts of tool-scoped permission
+    rules (e.g. "Bash(npm:*)") in cc_settings.json, deliberately excluding
+    bare directory paths (which ClAuSy itself manages via the Directories
+    tab and already tracks separately). Used to detect an external rewrite
+    that silently dropped rules ClAuSy doesn't otherwise watch."""
+    if not cc_settings:
+        return {"allow": 0, "deny": 0}
+    try:
+        data = _load(cc_settings)
+    except ConfigError:
+        return {"allow": 0, "deny": 0}
+    perms = data.get("permissions", {})
+    return {
+        "allow": len([p for p in perms.get("allow", []) if not os.path.isabs(p)]),
+        "deny": len([p for p in perms.get("deny", []) if not os.path.isabs(p)]),
+    }
+
+
+def find_unsafe_bash_wildcards(cc_settings: str) -> list:
+    """Flags Bash allow rules using a bare '*' wildcard instead of the
+    safer, documented trailing ':*' prefix-match form. Since '*' matches
+    any character — including shell operators like ';', '&&', '|' — a rule
+    such as Bash(git *) can in principle be satisfied by a command that
+    does something unrelated after a separator. Returns the flagged rule
+    strings."""
+    if not cc_settings:
+        return []
+    try:
+        data = _load(cc_settings)
+    except ConfigError:
+        return []
+    allow = data.get("permissions", {}).get("allow", [])
+    flagged = []
+    for rule in allow:
+        tool, pattern = _rule_tool_and_pattern(rule)
+        if tool != "Bash":
+            continue
+        if pattern.endswith(":*"):
+            continue
+        if "*" in pattern:
+            flagged.append(rule)
+    return flagged
+
+
 KNOWN_SETTINGS_KEYS = {
     "permissions", "hooks", "model", "env", "apiKeyHelper",
     "cleanupPeriodDays", "includeCoAuthoredBy", "statusLine", "outputStyle",

@@ -798,5 +798,63 @@ class TestIsSensitiveSystemPath(unittest.TestCase):
         self.assertTrue(config_manager.is_sensitive_system_path("/root"))
 
 
+class TestCountNonPathRules(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def _write(self, data):
+        p = os.path.join(self.tmp, "settings.json")
+        with open(p, "w", encoding="utf-8") as f:
+            json.dump(data, f)
+        return p
+
+    def test_blank_path_returns_zeros(self):
+        self.assertEqual(config_manager.count_non_path_rules(""), {"allow": 0, "deny": 0})
+
+    def test_counts_tool_rules_excluding_bare_paths(self):
+        abs_path = os.path.join(self.tmp, "project")
+        p = self._write({"permissions": {
+            "allow": ["Bash(npm:*)", "Read(**/.env)", abs_path],
+            "deny": ["Read(**/*.pem)"],
+        }})
+        self.assertEqual(config_manager.count_non_path_rules(p), {"allow": 2, "deny": 1})
+
+    def test_corrupt_file_returns_zeros(self):
+        p = os.path.join(self.tmp, "bad.json")
+        with open(p, "w") as f:
+            f.write("{broken")
+        self.assertEqual(config_manager.count_non_path_rules(p), {"allow": 0, "deny": 0})
+
+
+class TestFindUnsafeBashWildcards(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def _write(self, allow):
+        p = os.path.join(self.tmp, "settings.json")
+        with open(p, "w", encoding="utf-8") as f:
+            json.dump({"permissions": {"allow": allow}}, f)
+        return p
+
+    def test_bare_star_flagged(self):
+        p = self._write(["Bash(git *)"])
+        self.assertEqual(config_manager.find_unsafe_bash_wildcards(p), ["Bash(git *)"])
+
+    def test_colon_star_not_flagged(self):
+        p = self._write(["Bash(git status:*)"])
+        self.assertEqual(config_manager.find_unsafe_bash_wildcards(p), [])
+
+    def test_non_bash_rule_not_flagged(self):
+        p = self._write(["Read(**/*.env)"])
+        self.assertEqual(config_manager.find_unsafe_bash_wildcards(p), [])
+
+    def test_no_wildcard_not_flagged(self):
+        p = self._write(["Bash(npm install)"])
+        self.assertEqual(config_manager.find_unsafe_bash_wildcards(p), [])
+
+    def test_blank_path_returns_empty(self):
+        self.assertEqual(config_manager.find_unsafe_bash_wildcards(""), [])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

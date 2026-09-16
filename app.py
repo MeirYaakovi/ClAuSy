@@ -510,8 +510,15 @@ class ClausyApp:
         self._schema_banner.grid(row=8, column=0, sticky="ew", pady=(10, 0))
         self._schema_banner.grid_remove()
 
+        self._wildcard_banner = ctk.CTkLabel(
+            wrap, text="", fg_color="#3a2a1a", text_color=WARN, corner_radius=6,
+            font=("Segoe UI", 10, "bold"), anchor="w", justify="left", wraplength=760,
+            padx=12, pady=10)
+        self._wildcard_banner.grid(row=9, column=0, sticky="ew", pady=(10, 0))
+        self._wildcard_banner.grid_remove()
+
         sim_f = ctk.CTkFrame(wrap, fg_color=SURF2, corner_radius=8)
-        sim_f.grid(row=9, column=0, sticky="ew", pady=(14, 0))
+        sim_f.grid(row=10, column=0, sticky="ew", pady=(14, 0))
         sim_inner = ctk.CTkFrame(sim_f, fg_color="transparent")
         sim_inner.pack(fill="x", padx=12, pady=10)
         ctk.CTkLabel(
@@ -618,6 +625,22 @@ class ClausyApp:
             self._schema_banner.grid()
         else:
             self._schema_banner.grid_remove()
+
+    def _check_unsafe_bash_wildcards(self):
+        cc = self._cc_var.get().strip()
+        if not cc:
+            self._wildcard_banner.grid_remove()
+            return
+        flagged = config_manager.find_unsafe_bash_wildcards(cc)
+        if flagged:
+            self._wildcard_banner.configure(
+                text=f"⚠ {len(flagged)} Bash allow rule(s) use a bare '*' wildcard "
+                     f"instead of the safer ':*' prefix form — '*' matches any "
+                     f"character, including shell operators like ; && | , so a "
+                     f"command could slip through unintended: {', '.join(flagged)}")
+            self._wildcard_banner.grid()
+        else:
+            self._wildcard_banner.grid_remove()
 
     # ── Directories tab ───────────────────────────────────────────────────────
 
@@ -990,6 +1013,7 @@ class ClausyApp:
                 self._set_status("Config files look good ✔", CC_G)
         self._check_permission_mode()
         self._check_unknown_settings_keys()
+        self._check_unsafe_bash_wildcards()
         self._refresh_cd_candidates()
 
     # ── entry management ─────────────────────────────────────────────────────
@@ -1028,6 +1052,7 @@ class ClausyApp:
         Execute can detect if either file changed on disk since then."""
         self._cc_fingerprint = config_manager.file_fingerprint(self._cc_var.get())
         self._cd_fingerprint = config_manager.file_fingerprint(self._cd_var.get())
+        self._cc_rule_counts = config_manager.count_non_path_rules(self._cc_var.get())
 
     def _apply_sort(self, refresh: bool = True):
         key = self._sort_var.get()
@@ -1284,6 +1309,19 @@ class ClausyApp:
             changed.append("Claude Desktop config")
         if not changed:
             return True
+
+        dropped_warning = ""
+        current_counts = config_manager.count_non_path_rules(self._cc_var.get())
+        dropped = {k: (old, current_counts[k]) for k, old in self._cc_rule_counts.items()
+                   if current_counts[k] < old}
+        if dropped:
+            parts = [f"{k}: {old} → {new}" for k, (old, new) in dropped.items()]
+            dropped_warning = (
+                "\n\n⚠ Some Bash/Read/Edit-style rules (not bare directories) "
+                "disappeared from settings.json since ClAuSy last read it — "
+                f"{', '.join(parts)}. Writing now would permanently lose them, "
+                "since ClAuSy only manages directory entries, not these rules.")
+
         return messagebox.askyesno(
             "ClAuSy — File Changed Externally",
             f"{' and '.join(changed)} changed on disk since ClAuSy last read "
@@ -1291,7 +1329,7 @@ class ClausyApp:
             "another instance of ClAuSy.\n\n"
             "Writing now will overwrite those external changes with ClAuSy's "
             "in-memory version.\n\nOverwrite anyway? (Choose No, then use "
-            "Save & Reload first to pick up the external changes instead.)")
+            "Save & Reload first to pick up the external changes instead.)" + dropped_warning)
 
     def _confirm_changes_summary(self, summary: dict) -> bool:
         lines = []
