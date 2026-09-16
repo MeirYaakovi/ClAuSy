@@ -286,6 +286,33 @@ def find_hook_loop_risks(hooks: list) -> list:
     return flagged
 
 
+BLOCKING_HOOK_PATTERNS = [
+    (re.compile(r"\bread\s+-[a-z]*p\b|\bread\s+-[a-z]*s\b"), "prompts for interactive input (read -p/-s), which blocks waiting for input that will never arrive"),
+    (re.compile(r"read-host\b", re.IGNORECASE), "reads from stdin (Read-Host), which blocks waiting for input that will never arrive"),
+    (re.compile(r"\bnpm\s+(start|run\s+dev|run\s+watch)\b|\byarn\s+(start|dev|watch)\b"),
+     "starts a long-running dev server/watcher instead of exiting"),
+    (re.compile(r"\btail\s+-f\b"), "follows a file forever (tail -f) instead of exiting"),
+    (re.compile(r"\bdocker\s+compose\s+up\b(?!.*-d\b)|\bdocker-compose\s+up\b(?!.*-d\b)"),
+     "runs docker compose up in the foreground instead of detached (-d)"),
+]
+
+
+def find_hook_blocking_risks(hooks: list) -> list:
+    """Statically flags hook commands likely to hang instead of returning —
+    a blocking PreToolUse/PostToolUse/Stop hook freezes the whole Claude
+    Code session with no feedback, since Claude Code waits for the hook to
+    exit. Returns [{"path","event","command","reason"}]."""
+    flagged = []
+    for h in hooks:
+        for cmd in h.get("commands", []):
+            for pattern, reason in BLOCKING_HOOK_PATTERNS:
+                if pattern.search(cmd):
+                    flagged.append({"path": h["path"], "event": h["event"],
+                                     "command": cmd, "reason": reason})
+                    break
+    return flagged
+
+
 _EXPLICIT_INTERPRETER_RE = re.compile(
     r"^\s*(wsl\b|bash\b|sh\b|/bin/(ba)?sh\b|pwsh\b|powershell(\.exe)?\b)", re.IGNORECASE)
 

@@ -302,6 +302,34 @@ class TestClaudeMdStats(unittest.TestCase):
         self.assertFalse(result["too_long"])
 
 
+class TestFindHookBlockingRisks(unittest.TestCase):
+    def test_flags_interactive_read_prompt(self):
+        hooks = [{"path": "s.json", "event": "PreToolUse", "commands": ["read -p 'Continue? ' ans"]}]
+        flagged = claude_meta.find_hook_blocking_risks(hooks)
+        self.assertEqual(len(flagged), 1)
+        self.assertIn("blocks", flagged[0]["reason"])
+
+    def test_flags_npm_start(self):
+        hooks = [{"path": "s.json", "event": "PostToolUse", "commands": ["npm start"]}]
+        self.assertEqual(len(claude_meta.find_hook_blocking_risks(hooks)), 1)
+
+    def test_flags_tail_follow(self):
+        hooks = [{"path": "s.json", "event": "Stop", "commands": ["tail -f app.log"]}]
+        self.assertEqual(len(claude_meta.find_hook_blocking_risks(hooks)), 1)
+
+    def test_flags_docker_compose_up_foreground(self):
+        hooks = [{"path": "s.json", "event": "SessionStart", "commands": ["docker compose up"]}]
+        self.assertEqual(len(claude_meta.find_hook_blocking_risks(hooks)), 1)
+
+    def test_docker_compose_up_detached_not_flagged(self):
+        hooks = [{"path": "s.json", "event": "SessionStart", "commands": ["docker compose up -d"]}]
+        self.assertEqual(claude_meta.find_hook_blocking_risks(hooks), [])
+
+    def test_npm_test_not_flagged(self):
+        hooks = [{"path": "s.json", "event": "PreToolUse", "commands": ["npm test"]}]
+        self.assertEqual(claude_meta.find_hook_blocking_risks(hooks), [])
+
+
 class TestFindWindowsIncompatibleHooks(unittest.TestCase):
     def test_flags_dollar_paren_substitution_on_windows(self):
         hooks = [{"path": "s.json", "event": "PreToolUse", "commands": ["echo $(date)"]}]

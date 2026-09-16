@@ -1673,6 +1673,9 @@ class ClausyApp:
         for wi in claude_meta.find_windows_incompatible_hooks(hooks):
             hook_issues.setdefault((wi["path"], wi["event"]), []).append(
                 f"May silently fail on native Windows — {wi['reason']}: {wi['command']}")
+        for br in claude_meta.find_hook_blocking_risks(hooks):
+            hook_issues.setdefault((br["path"], br["event"]), []).append(
+                f"May hang the whole session — {br['reason']}: {br['command']}")
 
         r = 0
         self._agents_section_header(self._agents_scroll, r, f"Subagents ({len(agents)})")
