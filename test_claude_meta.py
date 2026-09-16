@@ -119,6 +119,48 @@ class TestFindAgentDescriptionIssues(unittest.TestCase):
         self.assertIn("identical to 2 other subagents", issues["a.md"][0])
 
 
+class TestFindSubagentClaudeMdBlindSpots(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.agents_dir = Path(self.tmp) / ".claude" / "agents"
+        self.agents_dir.mkdir(parents=True)
+
+    def _agent(self, name, description, scope="project"):
+        p = self.agents_dir / f"{name}.md"
+        p.write_text(f"---\nname: {name}\ndescription: {description}\n---\n", encoding="utf-8")
+        return {"scope": scope, "path": str(p), "description": description}
+
+    def _write_claude_md(self, line_count):
+        (Path(self.tmp) / "CLAUDE.md").write_text(
+            "\n".join(f"line {i}" for i in range(line_count)), encoding="utf-8")
+
+    def test_no_claude_md_no_issue(self):
+        agent = self._agent("reviewer", "Reviews code for bugs")
+        self.assertEqual(claude_meta.find_subagent_claude_md_blind_spots([agent]), {})
+
+    def test_tiny_claude_md_not_flagged(self):
+        self._write_claude_md(2)
+        agent = self._agent("reviewer", "Reviews code for bugs")
+        self.assertEqual(claude_meta.find_subagent_claude_md_blind_spots([agent]), {})
+
+    def test_substantial_claude_md_without_mention_flagged(self):
+        self._write_claude_md(20)
+        agent = self._agent("reviewer", "Reviews code for bugs")
+        issues = claude_meta.find_subagent_claude_md_blind_spots([agent])
+        self.assertIn(agent["path"], issues)
+        self.assertIn("CLAUDE.md", issues[agent["path"]][0])
+
+    def test_description_mentioning_claude_md_not_flagged(self):
+        self._write_claude_md(20)
+        agent = self._agent("reviewer", "Reviews code per this project's CLAUDE.md conventions")
+        self.assertEqual(claude_meta.find_subagent_claude_md_blind_spots([agent]), {})
+
+    def test_global_scope_agent_never_flagged(self):
+        self._write_claude_md(20)
+        agent = self._agent("reviewer", "Reviews code for bugs", scope="global")
+        self.assertEqual(claude_meta.find_subagent_claude_md_blind_spots([agent]), {})
+
+
 class TestFindHooks(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()

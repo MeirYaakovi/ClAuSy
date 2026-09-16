@@ -186,6 +186,44 @@ def find_agent_description_issues(agents: list) -> dict:
     return issues
 
 
+CLAUDE_MD_MENTION_RE = re.compile(r"claude\.?md|project convention", re.IGNORECASE)
+MIN_CLAUDE_MD_LINES_TO_MATTER = 5
+
+
+def find_subagent_claude_md_blind_spots(agents: list) -> dict:
+    """Task subagents don't automatically inherit the project's CLAUDE.md —
+    only the description Claude Code shows when deciding whether to
+    delegate to them does. Flags project-scoped subagents (from
+    find_agents()) whose own description never mentions CLAUDE.md/project
+    conventions, in a project whose CLAUDE.md is non-trivial — a likely
+    sign the subagent will silently apply its own conventions instead of
+    the project's. Returns {path: [issue_message, ...]}."""
+    issues: dict = {}
+    for a in agents:
+        if a.get("scope") != "project":
+            continue
+        desc = a.get("description") or ""
+        if CLAUDE_MD_MENTION_RE.search(desc):
+            continue
+        # agent path is <project_dir>/.claude/agents/<name>.md
+        project_dir = Path(a["path"]).parent.parent.parent
+        md = project_dir / "CLAUDE.md"
+        if not md.is_file():
+            continue
+        try:
+            line_count = len(md.read_text(encoding="utf-8").splitlines())
+        except OSError:
+            continue
+        if line_count < MIN_CLAUDE_MD_LINES_TO_MATTER:
+            continue
+        issues.setdefault(a["path"], []).append(
+            f"This project's CLAUDE.md has {line_count} lines of conventions, but "
+            "this subagent's description doesn't mention CLAUDE.md or project "
+            "conventions — subagents don't automatically read CLAUDE.md, so it may "
+            "silently apply its own interpretation instead.")
+    return issues
+
+
 def _extract_hook_commands(event_value) -> list:
     """Pulls the actual shell command strings out of one event's hook
     config, e.g. [{"matcher": "Bash", "hooks": [{"type": "command",

@@ -1662,6 +1662,8 @@ class ClausyApp:
         agents = claude_meta.find_agents(project_dirs)
         hooks  = claude_meta.find_hooks(project_dirs)
         agent_issues = claude_meta.find_agent_description_issues(agents)
+        for path, msgs in claude_meta.find_subagent_claude_md_blind_spots(agents).items():
+            agent_issues.setdefault(path, []).extend(msgs)
         hook_issues: dict = {}
         for d in claude_meta.find_dangerous_hook_commands(hooks):
             hook_issues.setdefault((d["path"], d["event"]), []).append(
